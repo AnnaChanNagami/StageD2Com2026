@@ -1,0 +1,15 @@
+# Environnement virtuel
+.venv/
+venv/
+
+# Enregistrements générés
+recordings/*.txt
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Éditeurs
+.vscode/
+.idea/

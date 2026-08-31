@@ -1,0 +1,11 @@
+# --- Reconnaissance vocale ---
+SpeechRecognition==3.10.0
+
+# --- Capture micro (Windows) ---
+# pyaudio ne s'installe pas facilement avec pip seul sur Windows.
+# Préfère :  pip install pipwin
+# puis    :  pipwin install pyaudio
+pyaudio==0.2.13
+
+# --- Raccourcis clavier globaux (Windows) ---
+keyboard==0.13.5
