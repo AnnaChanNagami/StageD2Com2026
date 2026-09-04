@@ -1,73 +1,64 @@
 {% extends "transcriptions/base.html" %}
 {% block title %}Historique — Qwen3-ASR{% endblock %}
 {% block content %}
-<div class="flex justify-between items-center mb-8">
+<div class="page-header d-flex justify-content-between align-items-center">
     <div>
-        <h2 class="text-3xl font-bold text-marine"><i class="bi bi-list-task"></i> Historique des transcriptions</h2>
-        <p class="text-gray-600">{{ stats.all }} transcription{{ stats.all|pluralize:"s" }} au total</p>
+        <h2><i class="bi bi-list-task"></i> Historique des transcriptions</h2>
+        <p>{{ stats.all }} transcription{{ stats.all|pluralize:"s" }} au total</p>
     </div>
-    <a href="{% url 'transcriptions:upload' %}" class="bg-marine text-white px-6 py-2 rounded-lg hover:bg-azur transition">
+    <a href="{% url 'transcriptions:upload' %}" class="btn btn-primary">
         <i class="bi bi-plus-lg"></i> Nouvelle transcription
     </a>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+<div class="row g-3 mb-4">
     {% for key, label in stats.items %}
-    <a href="?filter={{ key }}" class="bg-white p-6 rounded-xl border {% if filter == key %}border-marine ring-2 ring-marine/20{% else %}border-gray-200{% endif %} hover:shadow-md transition">
-        <div class="text-sm text-gray-500">{{ label }}</div>
-        <div class="text-3xl font-bold text-marine mt-1">{{ value }}</div>
-    </a>
+    <div class="col-md-3">
+        <a href="?filter={{ key }}" class="text-decoration-none">
+            <div class="stat-card {% if filter == key %}border-primary{% endif %}">
+                <div class="label">{{ label }}</div>
+                <div class="value">{{ value }}</div>
+            </div>
+        </a>
+    </div>
     {% endfor %}
 </div>
 
-<div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-    <div class="p-6 border-b border-gray-100 flex items-center justify-between">
-        <h3 class="font-bold text-marine"><i class="bi bi-list"></i> Transcriptions</h3>
-    </div>
-    <div class="overflow-x-auto">
-        <table class="w-full text-left border-collapse">
-            <thead>
-                <tr class="bg-gray-50 text-gray-500 text-sm border-b border-gray-100">
-                    <th class="p-4">Fichier</th>
-                    <th class="p-4">Langue</th>
-                    <th class="p-4">Segments</th>
-                    <th class="p-4">Statut</th>
-                    <th class="p-4">Durée</th>
-                    <th class="p-4 text-end">Actions</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
+<div class="card-panel">
+    <div class="panel-title"><i class="bi bi-list"></i> Transcriptions</div>
+    <div class="table-responsive">
+        <table class="table table-dark table-hover">
+            <thead><tr>
+                <th>Fichier</th><th>Langue</th><th>Segments</th><th>Statut</th><th>Durée</th><th>Actions</th>
+            </tr></thead>
+            <tbody>
             {% for j in jobs %}
-            <tr class="hover:bg-gray-50 transition">
-                <td class="p-4">
-                    <a href="{% url 'transcriptions:job_detail' j.id %}" class="font-bold text-marine hover:text-azur">
+            <tr>
+                <td>
+                    <a href="{% url 'transcriptions:job_detail' j.id %}" class="text-white text-decoration-none fw-bold">
                         {{ j.original_name|truncatechars:50 }}
                     </a>
-                    <div class="text-xs text-gray-400">{{ j.created_at|date:"d/m/Y H:i" }}</div>
+                    <div class="duration">{{ j.created_at|date:"d/m/Y H:i" }}</div>
                 </td>
-                <td class="p-4"><span class="px-2.5 py-1 text-xs rounded-full bg-blue-50 text-marine font-semibold">{{ j.language_detected|default:"auto" }}</span></td>
-                <td class="p-4 text-gray-600">{{ j.segment_count }}</td>
-                <td class="p-4">
-                    <span class="px-2.5 py-1 text-xs rounded-full {% if j.status == 'completed' %}bg-green-50 text-green-700{% elif j.status == 'failed' %}bg-red-50 text-red-700{% else %}bg-yellow-50 text-yellow-700{% endif %}">
-                        {{ j.get_status_display }}
-                    </span>
-                </td>
-                <td class="p-4 text-gray-500 text-sm">{% if j.duration_sec %}{{ j.duration_sec|floatformat:1 }}s{% else %}—{% endif %}</td>
-                <td class="p-4 text-end">
-                    <div class="inline-flex gap-2">
-                        <a href="{% url 'transcriptions:job_detail' j.id %}" class="p-2 text-gray-500 hover:text-marine transition" title="Voir"><i class="bi bi-eye"></i></a>
-                        <form method="POST" action="{% url 'transcriptions:delete_job' j.id %}" class="inline">
+                <td><span class="badge badge-completed">{{ j.language_detected|default:"auto" }}</span></td>
+                <td>{{ j.segment_count }}</td>
+                <td><span class="badge badge-{{ j.status }}">{{ j.get_status_display }}</span></td>
+                <td class="duration">{% if j.duration_sec %}{{ j.duration_sec|floatformat:1 }}s{% else %}—{% endif %}</td>
+                <td>
+                    <div class="btn-group btn-group-sm">
+                        <a href="{% url 'transcriptions:job_detail' j.id %}" class="btn btn-outline-light" title="Voir"><i class="bi bi-eye"></i></a>
+                        <form method="POST" action="{% url 'transcriptions:delete_job' j.id %}" class="d-inline">
                             {% csrf_token %}
-                            <button class="p-2 text-red-400 hover:text-red-600 transition" title="Supprimer" onclick="return confirm('Supprimer cette transcription ?')"><i class="bi bi-trash"></i></button>
+                            <button class="btn btn-outline-danger" title="Supprimer" onclick="return confirm('Supprimer cette transcription ?')"><i class="bi bi-trash"></i></button>
                         </form>
                     </div>
                 </td>
             </tr>
             {% empty %}
-            <tr><td colspan="6" class="text-center py-12 text-gray-400">
-                <i class="bi bi-inbox text-4xl mb-2 block"></i>
-                <p>Aucune transcription</p>
-                <a href="{% url 'transcriptions:upload' %}" class="inline-block mt-3 bg-marine text-white px-4 py-2 rounded-lg text-sm hover:bg-azur transition"><i class="bi bi-plus"></i> Créer la première</a>
+            <tr><td colspan="6" class="text-center py-5">
+                <i class="bi bi-inbox" style="font-size:2rem; color:rgba(255,255,255,0.2)"></i>
+                <p class="mt-2 text-muted">Aucune transcription</p>
+                <a href="{% url 'transcriptions:upload' %}" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> Créer la première</a>
             </td></tr>
             {% endfor %}
             </tbody>
