@@ -1,0 +1,301 @@
+{% extends "transcriptions/base.html" %}
+{% load humanize l10n %}
+
+{% block title %}Statistiques d'erreurs — Qwen3-ASR{% endblock %}
+{% block breadcrumb %}Statistiques d'erreurs{% endblock %}
+
+{% block content %}
+
+<!-- ═══════ Cartes résumé ═══════ -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3">
+        <div class="card stat-card h-100 border-0">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon icon-indigo"><i class="bi bi-clipboard-data"></i></div>
+                <div>
+                    <div class="stat-value">{{ summary.total }}</div>
+                    <div class="stat-label">Transcriptions</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card stat-card h-100 border-0">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon icon-green"><i class="bi bi-check2-circle"></i></div>
+                <div>
+                    <div class="stat-value">{{ summary.corrected }}</div>
+                    <div class="stat-label">Corrigées</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card stat-card h-100 border-0">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon icon-orange"><i class="bi bi-fonts"></i></div>
+                <div>
+                    <div class="stat-value">{{ summary.avg_cer }}%</div>
+                    <div class="stat-label">CER moyen</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card stat-card h-100 border-0">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon icon-blue"><i class="bi bi-fonts"></i></div>
+                <div>
+                    <div class="stat-value">{{ summary.avg_wer }}%</div>
+                    <div class="stat-label">WER moyen</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════ Graphiques ═══════ -->
+{% if summary.corrected > 0 %}
+<div class="row g-3 mb-4">
+    <div class="col-lg-8">
+        <div class="card h-100">
+            <div class="card-header bg-transparent">
+                <span class="fw-semibold"><i class="bi bi-bar-chart-fill me-1 text-primary"></i>Taux d'erreur par transcription</span>
+            </div>
+            <div class="card-body">
+                <canvas id="error-chart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header bg-transparent">
+                <span class="fw-semibold"><i class="bi bi-pie-chart-fill me-1 text-primary"></i>Types d'erreurs (moyenne)</span>
+            </div>
+            <div class="card-body d-flex align-items-center justify-content-center">
+                <div style="position:relative; max-width:200px; width:100%">
+                    <canvas id="errors-pie"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ═══════ Tableau détaillé ═══════ -->
+<div class="card mb-4">
+    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <span class="fw-semibold"><i class="bi bi-table me-1"></i>Tableau détaillé des erreurs</span>
+        <div class="d-flex align-items-center gap-2">
+            {% if summary.corrected > 0 %}
+            <a href="{% url 'transcriptions:corrections' %}?export=csv" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-download me-1"></i>Exporter CSV
+            </a>
+            {% endif %}
+            <span class="badge text-bg-secondary">{{ rows|length }} transcription{{ rows|length|pluralize }}</span>
+        </div>
+    </div>
+
+    {% if rows %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Fichier</th>
+                    <th class="text-center">Mots</th>
+                    <th class="text-center">Caractères</th>
+                    <th class="text-center">Édits (car.)</th>
+                    <th class="text-center">Édits (mots)</th>
+                    <th class="text-center">CER</th>
+                    <th class="text-center">WER</th>
+                    <th class="text-center">Corrigé</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="file-thumb"><i class="bi bi-file-earmark-music"></i></span>
+                            <span class="file-name text-truncate" style="max-width:220px">{{ r.filename }}</span>
+                        </div>
+                    </td>
+                    <td class="text-center text-body-secondary">{{ r.words }}</td>
+                    <td class="text-center text-body-secondary">{{ r.chars|intcomma }}</td>
+                    <td class="text-center">
+                        {% if r.has_correction %}
+                            <span class="fw-semibold text-danger">{{ r.char_edits }}</span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if r.has_correction %}
+                            <span class="fw-semibold text-warning">{{ r.word_edits }}</span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if r.has_correction %}
+                            {% if r.cer < 10 %}
+                                <span class="badge text-bg-success">{{ r.cer }}%</span>
+                            {% elif r.cer < 25 %}
+                                <span class="badge text-bg-warning">{{ r.cer }}%</span>
+                            {% else %}
+                                <span class="badge text-bg-danger">{{ r.cer }}%</span>
+                            {% endif %}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if r.has_correction %}
+                            {% if r.wer < 10 %}
+                                <span class="badge text-bg-success">{{ r.wer }}%</span>
+                            {% elif r.wer < 25 %}
+                                <span class="badge text-bg-warning">{{ r.wer }}%</span>
+                            {% else %}
+                                <span class="badge text-bg-danger">{{ r.wer }}%</span>
+                            {% endif %}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if r.has_correction %}
+                            <span class="text-success"><i class="bi bi-check-circle-fill"></i></span>
+                        {% else %}
+                            <span class="text-muted"><i class="bi bi-circle"></i></span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <a href="#card-{{ r.pk }}" class="btn btn-sm btn-outline-secondary" title="Voir la comparaison"
+                           onclick="document.getElementById('card-{{ r.pk }}').scrollIntoView({behavior:'smooth',block:'center'})">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card-body text-center py-5">
+        <div class="display-6 mb-3"><i class="bi bi-mic-mute"></i></div>
+        <h2 class="h5">Aucune transcription terminée</h2>
+        <p class="text-body-secondary">Commencez par transcrire un fichier audio.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ═══════ Détails par transcription : comparaison côte à côte ═══════ -->
+<h2 class="h5 fw-bold mb-3"><i class="bi bi-split-cells-horizontal me-2"></i>Comparaison ASR / Corrigé</h2>
+{% for r in rows %}
+<div class="card mb-3" id="card-{{ r.pk }}">
+    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-file-earmark-music text-primary"></i>
+            <span class="fw-semibold">{{ r.filename }}</span>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            {% if r.has_correction %}
+                <span class="badge text-bg-{% if r.cer < 10 %}success{% elif r.cer < 25 %}warning{% else %}danger{% endif %}">CER {{ r.cer }}%</span>
+                <span class="badge text-bg-{% if r.wer < 10 %}success{% elif r.wer < 25 %}warning{% else %}danger{% endif %}">WER {{ r.wer }}%</span>
+                <span class="badge text-bg-secondary">{{ r.word_edits }} édit{{ r.word_edits|pluralize }}</span>
+                <a href="{% url 'transcriptions:correction' r.pk %}" class="btn btn-sm btn-outline-warning">
+                    <i class="bi bi-pencil"></i> Modifier
+                </a>
+            {% else %}
+                <span class="badge text-bg-secondary">Non corrigée</span>
+                <a href="{% url 'transcriptions:correction' r.pk %}" class="btn btn-sm btn-outline-info">
+                    <i class="bi bi-pencil-square"></i> Corriger
+                </a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-lg-6">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <span class="badge text-bg-info"><i class="bi bi-robot me-1"></i>Transcription ASR</span>
+                    <small class="text-body-secondary">{{ r.words }} mots · {{ r.chars|intcomma }} car.</small>
+                </div>
+                <div class="p-3 rounded" style="background:#161a23; min-height:80px; font-size:.9rem; line-height:1.6">
+                    {% if r.asr_text %}{{ r.asr_text }}{% else %}<span class="text-muted fst-italic">Aucun texte</span>{% endif %}
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <span class="badge text-bg-success"><i class="bi bi-pencil-square me-1"></i>Texte corrigé</span>
+                </div>
+                {% if r.has_correction %}
+                <div class="p-3 rounded mb-2" style="background:#161a23; min-height:80px; font-size:.9rem; line-height:1.6; border-left:3px solid #10b981">
+                    {{ r.corrected_text }}
+                </div>
+                <div class="d-flex align-items-center gap-2 small text-body-secondary">
+                    <i class="bi bi-info-circle"></i>
+                    <span>{{ r.words }} mots · {{ r.chars|intcomma }} car.</span>
+                    {% if r.diff_errors %}<span class="ms-auto">{{ r.diff_errors }} correction{{ r.diff_errors|pluralize }} par rapport à l'ASR</span>{% endif %}
+                </div>
+                {% else %}
+                <div class="p-3 rounded" style="background:#161a23; border-left:3px solid rgba(148,163,184,.2)">
+                    <span class="text-muted fst-italic">Aucune correction disponible</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% endblock %}
+
+{% block extra_js %}
+{% if summary.corrected > 0 %}
+<script>
+    const labels  = {{ chart_labels|safe }};
+    const cerData = {{ chart_cer|safe }};
+    const werData = {{ chart_wer|safe }};
+
+    if (labels.length > 0) {
+        // ===== Graphique barres : CER et WER par transcription =====
+        new Chart(document.getElementById('error-chart'), {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'CER (%)', data: cerData, backgroundColor: '#f97316', borderRadius: 4 },
+                    { label: 'WER (%)', data: werData, backgroundColor: '#3b82f6', borderRadius: 4 },
+                ],
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { labels: { color: '#94a3b8', font: { size: 11 } } },
+                    tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y + '%' } },
+                },
+                scales: {
+                    x: { ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 45 }, grid: { display: false } },
+                    y: { ticks: { color: '#64748b', callback: v => v + '%' }, grid: { color: 'rgba(148,163,184,0.1)' }, beginAtZero: true },
+                },
+            },
+        });
+
+        // ===== Donut : CER vs espace correct =====
+        const avgCer = {{ summary.avg_cer|unlocalize }};
+        new Chart(document.getElementById('errors-pie'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Erreurs (CER)', 'Correct'],
+                datasets: [{
+                    data: [avgCer, 100 - avgCer],
+                    backgroundColor: ['#f97316', '#10b981'],
+                    borderWidth: 0,
+                }],
+            },
+            options: {
+                responsive: true,
+                cutout: '60%',
+                plugins: {
+                    legend: { labels: { color: '#94a3b8', font: { size: 11 } } },
+                },
+            },
+        });
+    }
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,436 @@
+{% extends "transcriptions/base.html" %}
+{% load static %}
+{% block title %}{{ job.original_name }} — Qwen3-ASR{% endblock %}
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <div>
+        <h2><i class="bi bi-file-earmark-music"></i> {{ job.original_name|truncatechars:50 }}</h2>
+        <p>
+            <span class="badge badge-{{ job.status }} me-2">{{ job.get_status_display }}</span>
+            {% if job.language_detected %}<span class="badge badge-completed me-2"><i class="bi bi-translate"></i> {{ job.language_detected }}</span>{% endif %}
+            {% if job.duration_sec %}<span class="duration me-2"><i class="bi bi-clock"></i> {{ duration_min }} min</span>{% endif %}
+            <span class="duration"><i class="bi bi-calendar"></i> {{ job.created_at|date:"d/m/Y H:i" }}</span>
+        </p>
+    </div>
+    <div class="btn-group">
+        <a href="{% url 'transcriptions:job_list' %}" class="btn btn-outline-light"><i class="bi bi-arrow-left"></i> Retour</a>
+        {% if job.status == "completed" %}
+        <a href="{% url 'transcriptions:correction' job.id %}" class="btn btn-outline-info">
+            <i class="bi bi-pencil-square"></i> Corriger
+        </a>
+        {% endif %}
+        <form method="POST" action="{% url 'transcriptions:delete_job' job.id %}" class="d-inline">
+            {% csrf_token %}
+            <button class="btn btn-outline-danger" onclick="return confirm('Supprimer cette transcription ?')"><i class="bi bi-trash"></i></button>
+        </form>
+    </div>
+</div>
+
+{% if job.status == "completed" %}
+<!-- Métriques détaillées -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Durée audio</div>
+                    <div class="value">{{ job.duration_sec|floatformat:1 }}s</div>
+                </div>
+                <div class="icon" style="background: rgba(13, 202, 240, 0.15); color: #22b8cf;">
+                    <i class="bi bi-mic"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Temps d'analyse</div>
+                    <div class="value">{{ job.elapsed_sec|floatformat:1 }}s</div>
+                    <div class="duration"><i class="bi bi-speedometer2"></i> x{{ job.ratio_audio|floatformat:1 }}</div>
+                </div>
+                <div class="icon" style="background: rgba(255, 146, 43, 0.15); color: #ff922b;">
+                    <i class="bi bi-cpu"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Mots transcrits</div>
+                    <div class="value">{{ job.total_words }}</div>
+                </div>
+                <div class="icon" style="background: rgba(132, 94, 247, 0.15); color: #845ef7;">
+                    <i class="bi bi-fonts"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Caractères</div>
+                    <div class="value">{{ job.total_chars }}</div>
+                </div>
+                <div class="icon" style="background: rgba(240, 101, 149, 0.15); color: #f06595;">
+                    <i class="bi bi-type"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Mini graphique : répartition analyse vs audio -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-speedometer2"></i> Analyse vs Audio</div>
+            <div class="chart-container" style="height: 200px;">
+                <canvas id="ratioChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-speedometer2"></i> Mots / Caractères</div>
+            <div class="chart-container" style="height: 200px;">
+                <canvas id="wcChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="row g-4">
+    <!-- Colonne gauche : transcription + segments -->
+    <div class="col-md-8">
+        <!-- Zone de transcription -->
+        <div class="card-panel">
+            <div class="panel-title d-flex justify-content-between">
+                <span><i class="bi bi-file-text"></i> Transcription</span>
+                <span class="duration">{{ job.total_words }} mots · {{ job.total_chars }} caractères</span>
+            </div>
+            {% if job.transcript_text %}
+            <div id="transcriptText" style="white-space: pre-wrap; font-size: 1.05rem; line-height: 1.7; max-height: 450px; overflow-y: auto; padding: 1rem; background: rgba(255,255,255,0.03); border-radius: 0.75rem;">{{ job.transcript_text }}</div>
+            {% elif job.status == "running" %}
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" style="width:3rem; height:3rem;"></div>
+                <p class="mt-3">Transcription en cours…</p>
+                <div class="progress" style="max-width:300px; margin:0 auto;">
+                    <div class="progress-bar bg-primary" id="progressBar" style="width:{{ job.progress|floatformat:0 }}%"></div>
+                </div>
+            </div>
+            {% else %}
+            <p class="text-muted text-center py-3">En attente de transcription…</p>
+            {% endif %}
+        </div>
+
+        <!-- Segments horaires -->
+        {% if segments %}
+        <div class="card-panel">
+            <div class="panel-title">
+                <i class="bi bi-list-ol"></i> Segments horodatés
+                <span class="ms-auto duration">{{ segments|length }} segment{{ segments|length|pluralize:"s" }}</span>
+            </div>
+            <div id="segmentsContainer" style="max-height: 350px; overflow-y: auto;">
+                {% for seg in segments %}
+                <div class="segment-item" data-start="{{ seg.start }}" data-end="{{ seg.end }}">
+                    <div class="d-flex gap-3">
+                        <span class="segment-time">{{ seg.start|floatformat:2 }}s</span>
+                        <span>{{ seg.text }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Erreur -->
+        {% if job.error %}
+        <div class="card-panel border-danger">
+            <div class="panel-title text-danger"><i class="bi bi-exclamation-triangle"></i> Erreur</div>
+            <pre style="white-space: pre-wrap; color: #ff6b6b;">{{ job.error }}</pre>
+        </div>
+        {% endif %}
+
+        <!-- Texte corrigé -->
+        {% if job.corrected_text %}
+        <div class="card-panel" style="border-color: rgba(13, 202, 240, 0.3);">
+            <div class="panel-title d-flex justify-content-between">
+                <span><i class="bi bi-pencil-square" style="color: #22b8cf;"></i> Correction</span>
+                <span class="duration">{{ job.corrected_at|date:"d/m/Y H:i" }}</span>
+            </div>
+            <div style="white-space: pre-wrap; font-size: 1.05rem; line-height: 1.7; max-height: 300px; overflow-y: auto; padding: 1rem; background: rgba(13, 202, 240, 0.05); border-radius: 0.75rem; border: 1px solid rgba(13, 202, 240, 0.15);">{{ job.corrected_text }}</div>
+        </div>
+
+        <!-- Comparatif diff -->
+        <div class="card-panel" style="border-color: rgba(132, 94, 247, 0.3);">
+            <div class="panel-title d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-arrow-left-right" style="color: #845ef7;"></i> Comparatif Qwen vs Correction</span>
+                <div class="d-flex gap-2 align-items-center">
+                    <small id="diffStats" class="duration"></small>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-light active" id="btnDiffWord" onclick="setDiffMode('word')" title="Comparaison mot par mot"><i class="bi bi-fonts"></i> Mots</button>
+                        <button class="btn btn-outline-light" id="btnDiffChar" onclick="setDiffMode('char')" title="Comparaison caractère par caractère"><i class="bi bi-type"></i> Caractères</button>
+                        <button class="btn btn-outline-light" id="btnDiffLine" onclick="setDiffMode('line')" title="Comparaison ligne par ligne"><i class="bi bi-text-paragraph"></i> Lignes</button>
+                    </div>
+                </div>
+            </div>
+            <!-- Légende -->
+            <div class="d-flex gap-3 mb-2" style="font-size: 0.82rem;">
+                <span><span style="background: rgba(40, 167, 69, 0.25); color: #51cf66; padding: 1px 6px; border-radius: 3px;">■</span> Ajouté dans la correction</span>
+                <span><span style="background: rgba(255, 107, 107, 0.25); color: #ff6b6b; padding: 1px 6px; border-radius: 3px;">■</span> Supprimé de l'original</span>
+                <span><span style="background: rgba(255, 255, 255, 0.05); padding: 1px 6px; border-radius: 3px;">■</span> Identique</span>
+            </div>
+            <!-- Filtre -->
+            <div class="d-flex gap-2 mb-3">
+                <button class="btn btn-sm btn-outline-light active" id="btnShowAll" onclick="setDiffFilter('all')">Tout</button>
+                <button class="btn btn-sm btn-outline-light" id="btnShowChanges" onclick="setDiffFilter('changes')">Modifications uniquement</button>
+            </div>
+            <div id="diffOutput" style="white-space: pre-wrap; font-size: 0.95rem; line-height: 1.8; max-height: 500px; overflow-y: auto; padding: 1rem; background: rgba(255,255,255,0.03); border-radius: 0.75rem; border: 1px solid rgba(255,255,255,0.05); font-family: 'Cascadia Code', 'Fira Code', monospace;"></div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Colonne droite : player + exports + métadonnées -->
+    <div class="col-md-4">
+        <!-- Player audio -->
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-play-circle"></i> Player</div>
+            <audio controls class="w-100" style="filter: invert(100%);">
+                <source src="{{ job.audio_file.url }}" type="audio/mpeg">
+                <source src="{{ job.audio_file.url }}" type="audio/wav">
+            </audio>
+            <div class="duration mt-2">
+                {% if job.duration_sec %}<i class="bi bi-clock"></i> {{ duration_min }} min{% endif %}
+                {% if job.device %}<span class="ms-2"><i class="bi bi-gpu-card"></i> {{ job.device }}</span>{% endif %}
+            </div>
+        </div>
+
+        <!-- Export -->
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-download"></i> Exporter</div>
+            {% if job.status == "completed" %}
+            <div class="d-grid gap-2">
+                <a href="{% url 'transcriptions:download_txt' job.id %}" class="btn btn-outline-light"><i class="bi bi-filetype-txt"></i> Télécharger TXT</a>
+                {% if segments %}
+                <a href="{% url 'transcriptions:download_srt' job.id %}" class="btn btn-outline-light"><i class="bi bi-closed-captioning"></i> Télécharger SRT (sous-titres)</a>
+                <a href="{% url 'transcriptions:download_json' job.id %}" class="btn btn-outline-light"><i class="bi bi-filetype-json"></i> Télécharger JSON</a>
+                {% endif %}
+            </div>
+            {% else %}
+            <p class="text-muted text-center">Disponible après transcription terminée</p>
+            {% endif %}
+        </div>
+
+        <!-- Métadonnées -->
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-info-circle"></i> Détails</div>
+            <table class="table table-dark table-sm mb-0">
+                <tr><td class="text-muted">ID</td><td style="font-size:0.8rem;">{{ job.id }}</td></tr>
+                <tr><td class="text-muted">Modèle</td><td>Qwen3-ASR</td></tr>
+                <tr><td class="text-muted">Langue</td><td>{{ job.language_detected|default:"Auto" }}</td></tr>
+                <tr><td class="text-muted">Durée audio</td><td>{{ job.duration_sec|default:"—"|floatformat:1 }}s</td></tr>
+                <tr><td class="text-muted">Temps traitement</td><td>{{ job.elapsed_sec|default:"—"|floatformat:1 }}s</td></tr>
+                <tr><td class="text-muted">Mots</td><td>{{ job.total_words }}</td></tr>
+                <tr><td class="text-muted">Caractères</td><td>{{ job.total_chars }}</td></tr>
+                <tr><td class="text-muted">Segments</td><td>{{ job.segment_count }}</td></tr>
+                <tr><td class="text-muted">Tokens générés</td><td>{{ job.generated_tokens|default:"—" }}</td></tr>
+                <tr><td class="text-muted">Fichier</td><td>{{ job.original_name|truncatechars:30 }}</td></tr>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+{% if job.status == "running" %}
+// Polling pour jobs en cours
+const jobId = '{{ job.id }}';
+setInterval(async () => {
+    try {
+        const r = await fetch('/api/status/' + jobId + '/');
+        const d = await r.json();
+        const bar = document.getElementById('progressBar');
+        if (bar) bar.style.width = d.progress + '%';
+        if (d.status === 'completed' || d.status === 'failed') window.location.reload();
+    } catch(e) {}
+}, 2000);
+{% endif %}
+
+{% if job.status == "completed" %}
+// Mini graphique : répartition analyse vs audio (doughnut)
+new Chart(document.getElementById('ratioChart'), {
+    type: 'doughnut',
+    data: {
+        labels: ['Durée audio', 'Temps analyse'],
+        datasets: [{
+            data: [{{ job.duration_sec|default:0|floatformat:1 }}, {{ job.elapsed_sec|default:0|floatformat:1 }}],
+            backgroundColor: ['rgba(13, 202, 240, 0.7)', 'rgba(255, 146, 43, 0.7)'],
+            borderWidth: 0
+        }]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false, cutout: '65%',
+        plugins: {
+            legend: { position: 'bottom', labels: { color: 'rgba(255,255,255,0.7)', padding: 10 } }
+        }
+    }
+});
+
+// Mini graphique : mots vs caractères (bar)
+new Chart(document.getElementById('wcChart'), {
+    type: 'bar',
+    data: {
+        labels: ['Mots', 'Caractères'],
+        datasets: [{
+            data: [{{ job.total_words }}, {{ job.total_chars }}],
+            backgroundColor: ['rgba(132, 94, 247, 0.7)', 'rgba(240, 101, 149, 0.7)'],
+            borderRadius: 6, barThickness: 50
+        }]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { ticks: { color: 'rgba(255,255,255,0.5)' }, grid: { display: false } },
+            y: { ticks: { color: 'rgba(255,255,255,0.5)' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+        }
+    }
+});
+{% endif %}
+
+{% if job.corrected_text %}
+// ============ Comparatif Qwen vs Correction (diff) ============
+const originalFull = `{{ job.transcript_text|escapejs }}`;
+const correctedFull = `{{ job.corrected_text|escapejs }}`;
+let diffMode = 'word';
+let diffFilter = 'all';
+
+function esc(html) {
+    const d = document.createElement('div');
+    d.textContent = html;
+    return d.innerHTML;
+}
+
+function renderDiff(parts, showSpace) {
+    let html = '';
+    parts.forEach(p => {
+        if (p.added) {
+            html += '<span class="diff-add" title="Ajouté">' + esc(p.value) + '</span>';
+        } else if (p.removed) {
+            html += '<span class="diff-del" title="Supprimé">' + esc(p.value) + '</span>';
+        } else {
+            html += '<span>' + esc(p.value) + '</span>';
+        }
+    });
+    return html;
+}
+
+function renderDiffLine(parts) {
+    let html = '';
+    parts.forEach(p => {
+        const lines = p.value.split('\n');
+        if (p.added) {
+            lines.forEach((l, i) => { if (l !== '' || i > 0) html += '<div class="diff-line diff-add">+' + esc(l || ' ') + '</div>'; });
+        } else if (p.removed) {
+            lines.forEach((l, i) => { if (l !== '' || i > 0) html += '<div class="diff-line diff-del">-' + esc(l || ' ') + '</div>'; });
+        } else {
+            lines.forEach((l, i) => { if (l !== '' || i > 0) html += '<div class="diff-line">' + esc(l || ' ') + '</div>'; });
+        }
+    });
+    return html;
+}
+
+let stats = { added: 0, removed: 0, unchanged: 0, charsAdded: 0, charsRemoved: 0 };
+
+function computeDiff() {
+    let parts;
+    if (diffMode === 'word') {
+        parts = Diff.diffWords(originalFull, correctedFull);
+    } else if (diffMode === 'char') {
+        parts = Diff.diffChars(originalFull, correctedFull);
+    } else {
+        parts = Diff.diffLines(originalFull, correctedFull);
+    }
+    return parts;
+}
+
+function applyDiff() {
+    const parts = computeDiff();
+    stats = { added: 0, removed: 0, unchanged: 0, charsAdded: 0, charsRemoved: 0 };
+    parts.forEach(p => {
+        if (p.added) { stats.added++; stats.charsAdded += p.value.length; }
+        else if (p.removed) { stats.removed++; stats.charsRemoved += p.value.length; }
+        else stats.unchanged++;
+    });
+
+    let display;
+    if (diffFilter === 'changes') {
+        display = parts.filter(p => p.added || p.removed);
+    } else {
+        display = parts;
+    }
+
+    let html = '';
+    if (diffMode === 'line') {
+        html = renderDiffLine(display);
+    } else {
+        html = renderDiff(display, diffMode === 'word');
+    }
+    document.getElementById('diffOutput').innerHTML = html;
+
+    // Statistiques
+    document.getElementById('diffStats').innerHTML =
+        '<i class="bi bi-arrow-up-right" style="color:#51cf66;"></i> +' + stats.charsAdded +
+        ' car. &nbsp; <i class="bi bi-arrow-down-left" style="color:#ff6b6b;"></i> −' + stats.charsRemoved +
+        ' car. &nbsp; <i class="bi bi-columns-gap"></i> ' + (stats.charsAdded + stats.charsRemoved) + ' car. modifiés';
+}
+
+function setDiffMode(mode) {
+    diffMode = mode;
+    document.querySelectorAll('#btnDiffWord, #btnDiffChar, #btnDiffLine').forEach(b => b.classList.remove('active'));
+    document.getElementById('btnDiff' + (mode.charAt(0).toUpperCase() + mode.slice(1))).classList.add('active');
+    applyDiff();
+}
+
+function setDiffFilter(filter) {
+    diffFilter = filter;
+    document.getElementById('btnShowAll').classList.toggle('active', filter === 'all');
+    document.getElementById('btnShowChanges').classList.toggle('active', filter === 'changes');
+    applyDiff();
+}
+
+// Injecter les styles des classes diff (charset du template existant)
+const diffStyle = document.createElement('style');
+diffStyle.textContent = `
+.diff-add { background: rgba(40, 167, 69, 0.25); color: #51cf66; border-radius: 3px; }
+.diff-del { background: rgba(255, 107, 107, 0.25); color: #ff6b6b; border-radius: 3px; text-decoration: line-through; }
+.diff-line { padding: 2px 4px; border-radius: 3px; }
+.diff-line.diff-add { background: rgba(40, 167, 69, 0.2); }
+.diff-line.diff-del { background: rgba(255, 107, 107, 0.2); }
+`;
+document.head.appendChild(diffStyle);
+
+applyDiff();
+{% endif %}
+
+// Sync player → segments (highlight du segment actif)
+const audio = document.querySelector('audio');
+const segs = document.querySelectorAll('.segment-item');
+if (audio && segs.length) {
+    audio.addEventListener('timeupdate', () => {
+        const t = audio.currentTime;
+        segs.forEach(s => {
+            const start = parseFloat(s.dataset.start), end = parseFloat(s.dataset.end);
+            s.style.background = (t >= start && t <= end) ? 'rgba(233, 69, 96, 0.12)' : '';
+        });
+    });
+}
+</script>
+{% endblock %}

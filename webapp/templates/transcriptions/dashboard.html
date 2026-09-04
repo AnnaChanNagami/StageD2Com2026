@@ -1,0 +1,614 @@
+{% extends "transcriptions/base.html" %}
+{% block title %}Dashboard — Qwen3-ASR{% endblock %}
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <div>
+        <h2><i class="bi bi-grid"></i> Dashboard</h2>
+        <p>Statistiques des transcriptions Qwen3-ASR</p>
+    </div>
+    <a href="{% url 'transcriptions:upload' %}" class="btn btn-primary">
+        <i class="bi bi-plus-lg"></i> Nouvelle transcription
+    </a>
+</div>
+
+<!-- Cartes stats -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <a href="{% url 'transcriptions:job_list' %}?filter=all" class="text-decoration-none">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Total transcriptions</div>
+                    <div class="value">{{ total_jobs }}</div>
+                </div>
+                <div class="icon" style="background: rgba(233, 69, 96, 0.15); color: var(--accent);">
+                    <i class="bi bi-files"></i>
+                </div>
+            </div>
+        </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="{% url 'transcriptions:job_list' %}?filter=completed" class="text-decoration-none">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Terminées</div>
+                    <div class="value">{{ total_jobs|add:"-"|add:failed|add:"-"|add:running }}</div>
+                    <div class="duration"><i class="bi bi-clock"></i> {{ total_audio_min }} min audio</div>
+                </div>
+                <div class="icon" style="background: rgba(40, 167, 69, 0.15); color: #51cf66;">
+                    <i class="bi bi-check-circle"></i>
+                </div>
+            </div>
+        </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="{% url 'transcriptions:job_list' %}?filter=running" class="text-decoration-none">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">En cours / Erreur</div>
+                    <div class="value">{{ running }}</div>
+                    <div class="duration"><i class="bi bi-x-circle" style="color:#ff6b6b"></i> {{ failed }} erreurs</div>
+                </div>
+                <div class="icon" style="background: rgba(255, 193, 7, 0.15); color: #ffd43b;">
+                    <i class="bi bi-arrow-repeat"></i>
+                </div>
+            </div>
+        </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="{% url 'transcriptions:job_list' %}?filter=all" class="text-decoration-none">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Mots transcrits</div>
+                    <div class="value">{{ total_words|default:"0" }}</div>
+                    <div class="duration"><i class="bi bi-tag"></i> {{ total_segments|default:0 }} segments</div>
+                </div>
+                <div class="icon" style="background: rgba(13, 202, 240, 0.15); color: #22b8cf;">
+                    <i class="bi bi-fonts"></i>
+                </div>
+            </div>
+        </div>
+        </a>
+    </div>
+</div>
+
+<!-- Deuxième rangée de cartes : métriques détaillées -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Caractères transcrits</div>
+                    <div class="value">{{ total_chars|default:"0" }}</div>
+                </div>
+                <div class="icon" style="background: rgba(132, 94, 247, 0.15); color: #845ef7;">
+                    <i class="bi bi-type"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Temps d'analyse total</div>
+                    <div class="value">{{ total_process_min }} min</div>
+                    <div class="duration"><i class="bi bi-speedometer2"></i> Ratio {{ avg_ratio }}x</div>
+                </div>
+                <div class="icon" style="background: rgba(255, 146, 43, 0.15); color: #ff922b;">
+                    <i class="bi bi-cpu"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Durée audio totale</div>
+                    <div class="value">{{ total_audio_min }} min</div>
+                </div>
+                <div class="icon" style="background: rgba(32, 201, 151, 0.15); color: #20c997;">
+                    <i class="bi bi-mic"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Mots / Caractères</div>
+                    <div class="value" style="font-size: 1.1rem;">{{ total_words }} / {{ total_chars }}</div>
+                </div>
+                <div class="icon" style="background: rgba(240, 101, 149, 0.15); color: #f06595;">
+                    <i class="bi bi-bar-chart"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Graphiques -->
+<div class="row g-3 mb-4">
+    <div class="col-md-8">
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-graph-up"></i> Activité (7 derniers jours)</div>
+            <div class="chart-container">
+                <canvas id="activityChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-translate"></i> Langues détectées</div>
+            <div class="chart-container">
+                <canvas id="langChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-stopwatch"></i> Temps analyse vs Durée audio (5 derniers jobs)</div>
+            <div class="chart-container">
+                <canvas id="timeCompareChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-fonts"></i> Mots & Caractères (5 derniers jobs)</div>
+            <div class="chart-container">
+                <canvas id="wordsCharsChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Troisième rangée : correction stats -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <a href="{% url 'transcriptions:job_list' %}?filter=completed" class="text-decoration-none">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Corrigés</div>
+                    <div class="value">{{ corrected_count }}</div>
+                    <div class="duration"><i class="bi bi-percent"></i> {{ correction_rate }}% du total</div>
+                </div>
+                <div class="icon" style="background: rgba(255, 211, 66, 0.15); color: #ffd342;">
+                    <i class="bi bi-pencil-square"></i>
+                </div>
+            </div>
+        </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Taux d'erreur moyen</div>
+                    <div class="value" style="color: {% if avg_error_pct < 5 %}#51cf66{% elif avg_error_pct < 15 %}#ffd43b{% else %}#ff6b6b{% endif %};">{{ avg_error_pct }}%</div>
+                    <div class="duration"><i class="bi bi-graph-down"></i> {{ total_char_diff }} car. corrigés</div>
+                </div>
+                <div class="icon" style="background: rgba(255, 107, 107, 0.15); color: #ff6b6b;">
+                    <i class="bi bi-bug"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Mots corrigés (moy.)</div>
+                    <div class="value">{{ avg_word_error }}</div>
+                    <div class="duration"><i class="bi bi-arrow-left-right"></i> par transcription</div>
+                </div>
+                <div class="icon" style="background: rgba(13, 202, 240, 0.15); color: #22b8cf;">
+                    <i class="bi bi-sort-numeric-up"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Précision globale</div>
+                    <div class="value" style="color: {% if avg_error_pct < 5 %}#51cf66{% elif avg_error_pct < 15 %}#ffd43b{% else %}#ff6b6b{% endif %};">{% if total_orig_chars > 0 %}{{ total_orig_chars|add:"-"|add:total_corr_chars }}{% else %}—{% endif %}</div>
+                    <div class="duration"><i class="bi bi-check2-all"></i> car. originaux</div>
+                </div>
+                <div class="icon" style="background: rgba(40, 167, 69, 0.15); color: #51cf66;">
+                    <i class="bi bi-shield-check"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Graphiques correction -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-pencil-square"></i> Taux d'erreur par transcription</div>
+            <div class="chart-container">
+                <canvas id="correctionChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-arrow-left-right"></i> Original vs Corrigé (caractères)</div>
+            <div class="chart-container">
+                <canvas id="corrCompareChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== SECTION ERREURS ===== -->
+<div class="page-header mb-3" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem;">
+    <h5 class="mb-0" style="color: #ff6b6b;"><i class="bi bi-exclamation-triangle"></i> Statistiques d'erreurs</h5>
+</div>
+
+<!-- Cartes erreurs -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Échecs total</div>
+                    <div class="value" style="color: {% if failed == 0 %}#51cf66{% elif failed < 3 %}#ffd43b{% else %}#ff6b6b{% endif %};">{{ failed }}</div>
+                    <div class="duration"><i class="bi bi-x-circle"></i> sur {{ total_jobs }} jobs</div>
+                </div>
+                <div class="icon" style="background: rgba(255, 107, 107, 0.15); color: #ff6b6b;">
+                    <i class="bi bi-exclamation-triangle"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Taux de réussite</div>
+                    <div class="value" style="color: {% if success_rate >= 95 %}#51cf66{% elif success_rate >= 80 %}#ffd43b{% else %}#ff6b6b{% endif %};">{{ success_rate }}%</div>
+                    <div class="duration"><i class="bi bi-check2-all"></i> {{ success_count }} réussis</div>
+                </div>
+                <div class="icon" style="background: rgba(40, 167, 69, 0.15); color: #51cf66;">
+                    <i class="bi bi-pie-chart"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Catégories d'erreur</div>
+                    <div class="value">{{ error_category_count }}</div>
+                    <div class="duration"><i class="bi bi-tags"></i> types identifiés</div>
+                </div>
+                <div class="icon" style="background: rgba(255, 146, 43, 0.15); color: #ff922b;">
+                    <i class="bi bi-funnel"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Dernière erreur</div>
+                    <div class="value" style="font-size: 0.95rem;">{% if last_error_date %}{{ last_error_date }}{% else %}—{% endif %}</div>
+                    <div class="duration"><i class="bi bi-clock"></i> heure</div>
+                </div>
+                <div class="icon" style="background: rgba(132, 94, 247, 0.15); color: #845ef7;">
+                    <i class="bi bi-clock-history"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Graphiques erreurs -->
+<div class="row g-3 mb-4">
+    <div class="col-md-5">
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-funnel"></i> Répartition par type d'erreur</div>
+            <div class="chart-container">
+                <canvas id="errorTypeChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-7">
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-graph-down"></i> Tendance des erreurs (7 jours)</div>
+            <div class="chart-container">
+                <canvas id="errorTrendChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tableau détaillé des erreurs -->
+{% if error_details_json != '[]' %}
+<div class="card-panel mb-4">
+    <div class="panel-title"><i class="bi bi-list-ul"></i> Détail des erreurs récentes</div>
+    <div class="table-responsive">
+        <table class="table table-dark table-hover">
+            <thead><tr>
+                <th>Fichier</th><th>Catégorie</th><th>Date</th><th>Message d'erreur</th>
+            </tr></thead>
+            <tbody id="errorTableBody">
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% if recent %}
+<div class="card-panel">
+    <div class="panel-title"><i class="bi bi-clock-history"></i> Transcriptions récentes</div>
+    <div class="table-responsive">
+        <table class="table table-dark table-hover">
+            <thead><tr>
+                <th>Nom</th><th>Langue</th><th>Audio</th><th>Analyse</th><th>Mots</th><th>Caract.</th><th>Statut</th><th>Actions</th>
+            </tr></thead>
+            <tbody>
+            {% for j in recent %}
+            <tr>
+                <td><a href="{% url 'transcriptions:job_detail' j.id %}" class="text-white text-decoration-none">{{ j.original_name|truncatechars:35 }}</a></td>
+                <td><span class="badge badge-completed">{{ j.language_detected|default:"auto" }}</span></td>
+                <td class="duration">{% if j.duration_sec %}{{ j.duration_sec|floatformat:1 }}s{% else %}—{% endif %}</td>
+                <td class="duration">{% if j.elapsed_sec %}{{ j.elapsed_sec|floatformat:1 }}s{% else %}—{% endif %}</td>
+                <td>{{ j.total_words }}</td>
+                <td>{{ j.total_chars }}</td>
+                <td><span class="badge badge-{{ j.status }}">{{ j.get_status_display }}</span></td>
+                <td><a href="{% url 'transcriptions:job_detail' j.id %}" class="btn btn-sm btn-outline-light">Voir</a></td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const series = {{ series|safe }};
+const langData = {{ lang_json|safe }};
+const jobsData = {{ jobs_chart|safe }};
+const corrData = {{ corrections_detail|safe }};
+const errorCatData = {{ error_categories_json|safe }};
+const errorDaysData = {{ error_days_json|safe }};
+const errorDetailsData = {{ error_details_json|safe }};
+
+// Graphique activité 7 jours (barres groupées)
+new Chart(document.getElementById('activityChart'), {
+    type: 'bar',
+    data: {
+        labels: series.map(s => s.label),
+        datasets: [
+            { label: 'Transcriptions', data: series.map(s => s.count), backgroundColor: 'rgba(233, 69, 96, 0.7)', borderRadius: 4 },
+            { label: 'Min audio', data: series.map(s => s.audio_min), backgroundColor: 'rgba(13, 202, 240, 0.5)', borderRadius: 4 }
+        ]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+            x: { ticks: { color: 'rgba(255,255,255,0.5)' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+            y: { ticks: { color: 'rgba(255,255,255,0.5)' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+        },
+        plugins: { legend: { labels: { color: 'rgba(255,255,255,0.7)' } } }
+    }
+});
+
+// Graphique langues (donut)
+new Chart(document.getElementById('langChart'), {
+    type: 'doughnut',
+    data: {
+        labels: langData.map(l => l.lang),
+        datasets: [{ data: langData.map(l => l.count), backgroundColor: ['#e94560','#22b8cf','#51cf66','#ffd43b','#845ef7','#ff922b','#20c997','#f06595'] }]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { color: 'rgba(255,255,255,0.7)', padding: 12 } } }
+    }
+});
+
+// Graphique comparaison temps analyse vs durée audio
+new Chart(document.getElementById('timeCompareChart'), {
+    type: 'bar',
+    data: {
+        labels: jobsData.map(j => j.name),
+        datasets: [
+            {
+                label: 'Durée audio (s)',
+                data: jobsData.map(j => j.audio_sec),
+                backgroundColor: 'rgba(13, 202, 240, 0.7)',
+                borderRadius: 4
+            },
+            {
+                label: "Temps d'analyse (s)",
+                data: jobsData.map(j => j.process_sec),
+                backgroundColor: 'rgba(255, 146, 43, 0.7)',
+                borderRadius: 4
+            }
+        ]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        indexAxis: 'y',
+        scales: {
+            x: { ticks: { color: 'rgba(255,255,255,0.5)' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+            y: { ticks: { color: 'rgba(255,255,255,0.5)', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+        },
+        plugins: { legend: { labels: { color: 'rgba(255,255,255,0.7)' } } }
+    }
+});
+
+// Graphique mots & caractères par job
+new Chart(document.getElementById('wordsCharsChart'), {
+    type: 'bar',
+    data: {
+        labels: jobsData.map(j => j.name),
+        datasets: [
+            {
+                label: 'Mots',
+                data: jobsData.map(j => j.words),
+                backgroundColor: 'rgba(132, 94, 247, 0.7)',
+                borderRadius: 4
+            },
+            {
+                label: 'Caractères',
+                data: jobsData.map(j => j.chars),
+                backgroundColor: 'rgba(240, 101, 149, 0.5)',
+                borderRadius: 4
+            }
+        ]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        indexAxis: 'y',
+        scales: {
+            x: { ticks: { color: 'rgba(255,255,255,0.5)' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+            y: { ticks: { color: 'rgba(255,255,255,0.5)', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+        },
+        plugins: { legend: { labels: { color: 'rgba(255,255,255,0.7)' } } }
+    }
+});
+
+// Graphique taux d'erreur par correction (barres)
+if (corrData.length > 0) {
+    new Chart(document.getElementById('correctionChart'), {
+        type: 'bar',
+        data: {
+            labels: corrData.map(c => c.name),
+            datasets: [{
+                label: 'Taux d\'erreur (%)',
+                data: corrData.map(c => c.error_pct),
+                backgroundColor: corrData.map(c => c.error_pct < 5 ? 'rgba(81, 207, 102, 0.7)' : c.error_pct < 15 ? 'rgba(255, 212, 59, 0.7)' : 'rgba(255, 107, 107, 0.7)'),
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: {
+                x: { ticks: { color: 'rgba(255,255,255,0.5)', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                y: { ticks: { color: 'rgba(255,255,255,0.5)' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+            },
+            plugins: { legend: { labels: { color: 'rgba(255,255,255,0.7)' } } }
+        }
+    });
+} else {
+    document.getElementById('correctionChart').parentElement.innerHTML = '<div class="text-center text-muted py-5"><i class="bi bi-pencil-square" style="font-size:2rem;"></i><br>Aucune correction pour le moment</div>';
+}
+
+// Graphique original vs corrigé (barres groupées)
+if (corrData.length > 0) {
+    new Chart(document.getElementById('corrCompareChart'), {
+        type: 'bar',
+        data: {
+            labels: corrData.map(c => c.name),
+            datasets: [
+                { label: 'Original (car.)', data: corrData.map(c => c.orig_chars), backgroundColor: 'rgba(255, 107, 107, 0.6)', borderRadius: 4 },
+                { label: 'Corrigé (car.)', data: corrData.map(c => c.corr_chars), backgroundColor: 'rgba(81, 207, 102, 0.6)', borderRadius: 4 }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: {
+                x: { ticks: { color: 'rgba(255,255,255,0.5)', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                y: { ticks: { color: 'rgba(255,255,255,0.5)' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+            },
+            plugins: { legend: { labels: { color: 'rgba(255,255,255,0.7)' } } }
+        }
+    });
+} else {
+    document.getElementById('corrCompareChart').parentElement.innerHTML = '<div class="text-center text-muted py-5"><i class="bi bi-arrow-left-right" style="font-size:2rem;"></i><br>Aucune correction pour le moment</div>';
+}
+
+// ===== GRAPHIQUES ERREURS =====
+
+// Graphique répartition erreurs par type (donut)
+if (errorCatData.length > 0) {
+    const errorColors = ['#ff6b6b','#ff922b','#ffd43b','#51cf66','#22b8cf','#845ef7','#f06595','#20c997','#e94560','#66d9e8'];
+    new Chart(document.getElementById('errorTypeChart'), {
+        type: 'doughnut',
+        data: {
+            labels: errorCatData.map(c => c.category),
+            datasets: [{ data: errorCatData.map(c => c.count), backgroundColor: errorColors.slice(0, errorCatData.length) }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { color: 'rgba(255,255,255,0.7)', padding: 10, font: { size: 11 } } }
+            },
+            cutout: '55%'
+        }
+    });
+} else {
+    document.getElementById('errorTypeChart').parentElement.innerHTML = '<div class="text-center text-muted py-5"><i class="bi bi-check-circle" style="font-size:2rem;color:#51cf66;"></i><br><br>Aucune erreur — tout fonctionne !</div>';
+}
+
+// Graphique tendance erreurs (7 jours, barres empilées)
+if (errorDaysData.length > 0) {
+    // Collecter toutes les catégories présentes sur la semaine
+    const allCats = new Set();
+    errorDaysData.forEach(d => Object.keys(d.categories || {}).forEach(c => allCats.add(c)));
+    const catList = Array.from(allCats);
+    const errorColors = ['#ff6b6b','#ff922b','#ffd43b','#51cf66','#22b8cf','#845ef7','#f06595','#20c997'];
+
+    const datasets = catList.map((cat, i) => ({
+        label: cat,
+        data: errorDaysData.map(d => d.categories[cat] || 0),
+        backgroundColor: errorColors[i % errorColors.length],
+        borderRadius: 3
+    }));
+
+    new Chart(document.getElementById('errorTrendChart'), {
+        type: 'bar',
+        data: {
+            labels: errorDaysData.map(d => d.label),
+            datasets: datasets
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: {
+                x: { stacked: true, ticks: { color: 'rgba(255,255,255,0.5)' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                y: { stacked: true, ticks: { color: 'rgba(255,255,255,0.5)', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.05)' } }
+            },
+            plugins: { legend: { labels: { color: 'rgba(255,255,255,0.7)', font: { size: 10 } } } }
+        }
+    });
+} else {
+    document.getElementById('errorTrendChart').parentElement.innerHTML = '<div class="text-center text-muted py-5"><i class="bi bi-graph-up" style="font-size:2rem;color:#51cf66;"></i><br><br>Aucune erreur cette semaine</div>';
+}
+
+// Tableau détaillé des erreurs
+if (errorDetailsData.length > 0) {
+    const tbody = document.getElementById('errorTableBody');
+    errorDetailsData.forEach(e => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="max-width:200px;" title="${e.name}">${e.name}</td>
+            <td><span class="badge" style="background: rgba(255,107,107,0.2); color: #ff6b6b;">${e.category}</span></td>
+            <td class="duration">${e.created_at}</td>
+            <td style="max-width:400px; font-size:0.82rem; color: rgba(255,255,255,0.5);" title="${e.error_msg}">${e.error_msg}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+{% endblock %}

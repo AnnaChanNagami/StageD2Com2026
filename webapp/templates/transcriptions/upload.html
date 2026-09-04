@@ -1,0 +1,145 @@
+{% extends "transcriptions/base.html" %}
+{% block title %}Nouvelle transcription — Qwen3-ASR{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2><i class="bi bi-upload"></i> Nouvelle transcription</h2>
+    <p>Téléversez un fichier audio pour le transcrire avec Qwen3-ASR</p>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-8">
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-cloud-arrow-up"></i> Fichier audio</div>
+            <form id="uploadForm" method="POST" action="{% url 'transcriptions:api_job_create' %}" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="drop-zone" id="dropZone">
+                    <i class="bi bi-cloud-arrow-up"></i>
+                    <h5>Glissez votre fichier ici</h5>
+                    <p class="text-muted">WAV, MP3, MP4, FLAC, M4A, OGG… — Max 2 Go</p>
+                    <input type="file" id="audioFile" name="audio_file" accept="audio/*" class="d-none">
+                    <button type="button" class="btn btn-outline-light" onclick="document.getElementById('audioFile').click()">
+                        <i class="bi bi-folder2-open"></i> Parcourir
+                    </button>
+                </div>
+                <div id="fileInfo" class="mt-3" style="display:none;">
+                    <div class="d-flex align-items-center gap-3 p-3" style="background: rgba(40,167,69,0.1); border-radius: 0.75rem; border: 1px solid rgba(40,167,69,0.3);">
+                        <i class="bi bi-file-earmark-music text-success" style="font-size: 1.5rem;"></i>
+                        <div>
+                            <div id="fileName" class="fw-bold"></div>
+                            <div id="fileSize" class="duration"></div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-light ms-auto" onclick="clearFile()">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-gear"></i> Options</div>
+            <div class="mb-3">
+                <label class="form-label">Langue (auto-détection par défaut)</label>
+                <select name="language" id="languageSelect" class="form-select bg-dark text-white border-secondary">
+                    <option value="">Auto-détection</option>
+                    {% for lang in languages %}
+                    <option value="{{ lang }}"{% if lang == default_language %} selected{% endif %}>{{ lang }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Contexte / hotwords (optionnel)</label>
+                <textarea name="prompt" id="promptInput" class="form-control bg-dark text-white border-secondary"
+                    rows="3" placeholder="Termes techniques, noms propres, contexte…"></textarea>
+            </div>
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="timestamps" name="timestamps" value="1">
+                <label class="form-check-label" for="timestamps">
+                    <i class="bi bi-clock"></i> Activer les timestamps (sous-titres SRT)
+                </label>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Max tokens générés</label>
+                <input type="number" name="max_tokens" id="maxTokens" class="form-control bg-dark text-white border-secondary" value="512" min="64" max="2048">
+            </div>
+        </div>
+
+        <button type="button" class="btn btn-primary w-100" id="submitBtn" onclick="submitUpload()" disabled>
+            <i class="bi bi-play-fill"></i> Lancer la transcription
+        </button>
+
+        <div id="statusBox" class="mt-3" style="display:none;">
+            <div class="card-panel">
+                <div id="statusText" class="fw-bold text-white"></div>
+                <div class="progress mt-2">
+                    <div id="statusBar" class="progress-bar bg-primary" style="width:0%"></div>
+                </div>
+                <div id="statusDetail" class="duration mt-1"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('audioFile');
+const fileInfo = document.getElementById('fileInfo');
+const submitBtn = document.getElementById('submitBtn');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('dragover'); fileInput.files = e.dataTransfer.files; onFile(); });
+fileInput.addEventListener('change', onFile);
+
+function onFile() {
+    const f = fileInput.files[0];
+    if (!f) { fileInfo.style.display = 'none'; submitBtn.disabled = true; return; }
+    document.getElementById('fileName').textContent = f.name;
+    document.getElementById('fileSize').textContent = (f.size / (1024*1024)).toFixed(1) + ' Mo';
+    fileInfo.style.display = 'block';
+    submitBtn.disabled = false;
+}
+function clearFile() { fileInput.value = ''; fileInfo.style.display = 'none'; submitBtn.disabled = true; }
+
+async function submitUpload() {
+    if (!fileInput.files[0]) return;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Envoi…';
+    const fd = new FormData();
+    fd.append('audio_file', fileInput.files[0]);
+    fd.append('language', document.getElementById('languageSelect').value);
+    fd.append('prompt', document.getElementById('promptInput').value);
+    fd.append('timestamps', document.getElementById('timestamps').checked ? '1' : '');
+    fd.append('max_tokens', document.getElementById('maxTokens').value);
+
+    try {
+        const resp = await fetch("{% url 'transcriptions:api_job_create' %}", { method: 'POST', body: fd });
+        const data = await resp.json();
+        if (data.id) pollJob(data.id);
+        else { alert(data.error || 'Erreur'); resetBtn(); }
+    } catch(e) { alert('Erreur réseau: ' + e.message); resetBtn(); }
+}
+
+function pollJob(id) {
+    const statusBox = document.getElementById('statusBox');
+    statusBox.style.display = 'block';
+    const interval = setInterval(async () => {
+        try {
+            const resp = await fetch('/api/status/' + id + '/');
+            const d = await resp.json();
+            document.getElementById('statusText').textContent = d.status === 'completed' ? '✅ Terminé' :
+                d.status === 'failed' ? '❌ ' + (d.error || 'Erreur') : '⏳ ' + (d.stage || d.status);
+            document.getElementById('statusBar').style.width = d.progress + '%';
+            document.getElementById('statusDetail').textContent = d.status === 'completed' ? 'Redirection…' : d.progress + '%';
+            if (d.status === 'completed' || d.status === 'failed') { clearInterval(interval); window.location = d.url; }
+        } catch(e) {}
+    }, 1500);
+}
+
+function resetBtn() { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="bi bi-play-fill"></i> Lancer la transcription'; }
+</script>
+{% endblock %}
