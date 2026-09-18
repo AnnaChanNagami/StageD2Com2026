@@ -1,0 +1,59 @@
+=================================================================
+  QWEN3-ASR — APPLICATION WEB DJANGO — GUIDE DE DÉMARRAGE
+=================================================================
+
+L'application est fractionnée en DEUX processus à lancer dans
+deux terminaux séparés, depuis le dossier webapp/.
+
+  cd "C:/Users/elodi/Desktop/Stage/Outil Speech to text/Qwen3-ASR/webapp"
+
+-----------------------------------------------------------------
+TERMINAL 1 — Serveur web (interface)
+-----------------------------------------------------------------
+  ../.venv/Scripts/python.exe manage.py runserver 0.0.0.0:8002 --noreload
+
+  Accès : http://127.0.0.1:8002
+
+-----------------------------------------------------------------
+TERMINAL 2 — Worker de transcription (tourne le modèle)
+-----------------------------------------------------------------
+  ../.venv/Scripts/python.exe manage.py run_worker
+  # ou traitement d'un seul job :  manage.py run_worker --once
+
+  Le worker charge Qwen3-ASR-0.6B sur le GPU (RTX 3060) au 1er job.
+
+-----------------------------------------------------------------
+PAGES
+-----------------------------------------------------------------
+  http://127.0.0.1:8002/            Dashboard (stats + graphiques)
+  http://127.0.0.1:8002/upload/     Nouvelle transcription
+  http://127.0.0.1:8002/jobs/       Historique des transcriptions
+  /jobs/<id>/                       Détail + exports TXT/JSON/SRT
+
+-----------------------------------------------------------------
+API REST
+-----------------------------------------------------------------
+  POST /jobs/create/     (multipart, champ "audio_file")
+  GET  /api/status/<id>/
+  GET  /api/stats/
+
+-----------------------------------------------------------------
+PARAMÈTRES (webapp/qwenweb/settings.py)
+-----------------------------------------------------------------
+  QWEN_MODEL_ID       -> "Qwen/Qwen3-ASR-0.6B"
+  QWEN_DEVICE         -> "cuda" (GPU) / "cpu"
+  QWEN_FORCE_ALIGN    -> True = timestamps mot par mot (plus lent)
+  QWEN_MAX_NEW_TOKENS -> 1024
+
+-----------------------------------------------------------------
+FICHIERS CLÉS (webapp/)
+-----------------------------------------------------------------
+  qwenweb/settings.py                  configuration
+  transcriptions/models.py             modèle TranscriptionJob
+  transcriptions/qwen_service.py       pont Django <-> qwen_asr
+  transcriptions/views.py              vues (HTML + API JSON)
+  transcriptions/urls.py               routage
+  transcriptions/management/commands/run_worker.py   worker
+  templates/transcriptions/            base/dashboard/job_* /upload
+  static/css/app.css                   feuille de style (Bootstrap sombre)
+=================================================================

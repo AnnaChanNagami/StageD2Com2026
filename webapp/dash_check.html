@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="fr" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard — Qwen3-ASR</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --sidebar-width: 260px;
+            --gradient-start: #16213e;
+            --gradient-end: #0f3460;
+            --accent: #e94560;
+            --accent-hover: #ff6b81;
+            --card-bg: #1a1d2e;
+            --card-border: #2d3148;
+        }
+        body { background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end)); min-height: 100vh; font-family: 'Segoe UI', system-ui, sans-serif; }
+        .sidebar { width: var(--sidebar-width); min-height: 100vh; background: rgba(15, 18, 35, 0.95); border-right: 1px solid var(--card-border); position: fixed; top: 0; left: 0; z-index: 100; backdrop-filter: blur(20px); }
+        .sidebar .logo { padding: 1.5rem 1.25rem; border-bottom: 1px solid var(--card-border); }
+        .sidebar .logo h5 { color: #fff; margin: 0; font-weight: 700; }
+        .sidebar .logo small { color: rgba(255,255,255,0.5); }
+        .sidebar .nav-link { color: rgba(255,255,255,0.65); padding: 0.75rem 1.25rem; border-radius: 0.5rem; margin: 0.15rem 0.75rem; transition: all 0.2s; }
+        .sidebar .nav-link:hover { color: #fff; background: rgba(233, 69, 96, 0.15); }
+        .sidebar .nav-link.active { color: #fff; background: var(--accent); font-weight: 600; }
+        .sidebar .nav-link i { width: 1.5rem; margin-right: 0.5rem; }
+        .main-content { margin-left: var(--sidebar-width); padding: 2rem 2.5rem; }
+        .page-header { margin-bottom: 2rem; }
+        .page-header h2 { font-weight: 700; color: #fff; }
+        .page-header p { color: rgba(255,255,255,0.6); margin: 0; }
+        .stat-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 1rem; padding: 1.5rem; transition: all 0.25s; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.3); }
+        .stat-card .icon { width: 48px; height: 48px; border-radius: 0.75rem; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; }
+        .stat-card .value { font-size: 1.8rem; font-weight: 700; color: #fff; }
+        .stat-card .label { font-size: 0.85rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.5px; }
+        .card-panel { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 1rem; padding: 1.5rem; margin-bottom: 1.5rem; }
+        .card-panel .panel-title { font-size: 1rem; font-weight: 600; color: #fff; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+        .card-panel .panel-title i { color: var(--accent); }
+        .badge-status { font-size: 0.75rem; padding: 0.35em 0.65em; font-weight: 600; border-radius: 0.5rem; }
+        .badge-completed { background: rgba(40, 167, 69, 0.15); color: #51cf66; border: 1px solid rgba(40, 167, 69, 0.3); }
+        .badge-running { background: rgba(13, 202, 240, 0.15); color: #22b8cf; border: 1px solid rgba(13, 202, 240, 0.3); }
+        .badge-failed { background: rgba(220, 53, 69, 0.15); color: #ff6b6b; border: 1px solid rgba(220, 53, 69, 0.3); }
+        .badge-pending { background: rgba(255, 193, 7, 0.15); color: #ffd43b; border: 1px solid rgba(255, 193, 7, 0.3); }
+        .table-dark { --bs-table-bg: transparent; --bs-table-border-color: var(--card-border); }
+        .table-dark th { color: rgba(255,255,255,0.5); font-weight: 600; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.5px; border-bottom: 2px solid var(--card-border) !important; }
+        .table-dark td { vertical-align: middle; border-bottom: 1px solid var(--card-border) !important; }
+        .table-dark tbody tr:hover { background: rgba(233, 69, 96, 0.08) !important; }
+        .btn-primary { background: var(--accent); border-color: var(--accent); }
+        .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+        .btn-outline-light { border-color: var(--card-border); }
+        .progress { background: rgba(255,255,255,0.1); border-radius: 0.5rem; }
+        .progress-bar { border-radius: 0.5rem; }
+        .chart-container { height: 260px; }
+        .drop-zone { border: 2px dashed var(--card-border); border-radius: 1rem; padding: 3rem; text-align: center; transition: all 0.3s; cursor: pointer; background: rgba(26, 29, 46, 0.5); }
+        .drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); background: rgba(233, 69, 96, 0.08); }
+        .drop-zone i { font-size: 3rem; color: var(--accent); margin-bottom: 1rem; }
+        .duration { font-size: 0.85rem; color: rgba(255,255,255,0.5); }
+        .text-muted { color: rgba(255,255,255,0.4) !important; }
+        .segment-item { background: rgba(255,255,255,0.03); border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 0.5rem; border-left: 3px solid var(--accent); transition: all 0.2s; }
+        .segment-item:hover { background: rgba(233, 69, 96, 0.06); }
+        .segment-time { font-family: 'JetBrains Mono', monospace; color: var(--accent); font-weight: 600; }
+        .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 1050; }
+        @media (max-width: 768px) { .sidebar { display: none; } .main-content { margin-left: 0; padding: 1rem; } }
+    </style>
+    
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo">
+            <h5><i class="bi bi-mic"></i> Qwen3-ASR</h5>
+            <small>Transcription multilingue</small>
+        </div>
+        <nav class="mt-3">
+            <a class="nav-link active" href="/">
+                <i class="bi bi-grid"></i> Dashboard
+            </a>
+            <a class="nav-link " href="/upload/">
+                <i class="bi bi-upload"></i> Transcrire
+            </a>
+            <a class="nav-link " href="/jobs/">
+                <i class="bi bi-list-task"></i> Historique
+            </a>
+            
+            <div class="mt-4 px-3">
+                <small class="text-muted d-block">Modèle chargé</small>
+                <div class="d-flex align-items-center mt-1">
+                    <span class="badge badge-completed me-2"><i class="bi bi-check-circle"></i> GPU Prêt</span>
+                </div>
+            </div>
+            
+        </nav>
+    </div>
+
+    <div class="main-content">
+        
+<div class="page-header d-flex justify-content-between align-items-center">
+    <div>
+        <h2><i class="bi bi-grid"></i> Dashboard</h2>
+        <p>Statistiques des transcriptions Qwen3-ASR</p>
+    </div>
+    <a href="/upload/" class="btn btn-primary">
+        <i class="bi bi-plus-lg"></i> Nouvelle transcription
+    </a>
+</div>
+
+<!-- Cartes stats -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <a href="/jobs/?filter=all" class="text-decoration-none">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Total transcriptions</div>
+                    <div class="value">14</div>
+                </div>
+                <div class="icon" style="background: rgba(233, 69, 96, 0.15); color: var(--accent);">
+                    <i class="bi bi-files"></i>
+                </div>
+            </div>
+        </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="/jobs/?filter=completed" class="text-decoration-none">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Terminées</div>
+                    <div class="value"></div>
+                    <div class="duration"><i class="bi bi-clock"></i> 7,3 min audio</div>
+                </div>
+                <div class="icon" style="background: rgba(40, 167, 69, 0.15); color: #51cf66;">
+                    <i class="bi bi-check-circle"></i>
+                </div>
+            </div>
+        </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="/jobs/?filter=running" class="text-decoration-none">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">En cours / Erreur</div>
+                    <div class="value">0</div>
+                    <div class="duration"><i class="bi bi-x-circle" style="color:#ff6b6b"></i> 0 erreurs</div>
+                </div>
+                <div class="icon" style="background: rgba(255, 193, 7, 0.15); color: #ffd43b;">
+                    <i class="bi bi-arrow-repeat"></i>
+                </div>
+            </div>
+        </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="/jobs/?filter=all" class="text-decoration-none">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Mots transcrits</div>
+                    <div class="value">533</div>
+                    <div class="duration"><i class="bi bi-tag"></i> 14 segments</div>
+                </div>
+                <div class="icon" style="background: rgba(13, 202, 240, 0.15); color: #22b8cf;">
+                    <i class="bi bi-fonts"></i>
+                </div>
+            </div>
+        </div>
+        </a>
+    </div>
+</div>
+
+<!-- Deuxième rangée de cartes : métriques détaillées -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Caractères transcrits</div>
+                    <div class="value">2907</div>
+                </div>
+                <div class="icon" style="background: rgba(132, 94, 247, 0.15); color: #845ef7;">
+                    <i class="bi bi-type"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Temps d'analyse total</div>
+                    <div class="value">1,2 min</div>
+                    <div class="duration"><i class="bi bi-speedometer2"></i> Ratio 0,16x</div>
+                </div>
+                <div class="icon" style="background: rgba(255, 146, 43, 0.15); color: #ff922b;">
+                    <i class="bi bi-cpu"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Durée audio totale</div>
+                    <div class="value">7,3 min</div>
+                </div>
+                <div class="icon" style="background: rgba(32, 201, 151, 0.15); color: #20c997;">
+                    <i class="bi bi-mic"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Mots / Caractères</div>
+                    <div class="value" style="font-size: 1.1rem;">533 / 2907</div>
+                </div>
+                <div class="icon" style="background: rgba(240, 101, 149, 0.15); color: #f06595;">
+                    <i class="bi bi-bar-chart"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Graphiques -->
+<div class="row g-3 mb-4">
+    <div class="col-md-8">
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-graph-up"></i> Activité (7 derniers jours)</div>
+            <div class="chart-container">
+                <canvas id="activityChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-translate"></i> Langues détectées</div>
+            <div class="chart-container">
+                <canvas id="langChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-stopwatch"></i> Temps analyse vs Durée audio (5 derniers jobs)</div>
+            <div class="chart-container">
+                <canvas id="timeCompareChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-fonts"></i> Mots & Caractères (5 derniers jobs)</div>
+            <div class="chart-container">
+                <canvas id="wordsCharsChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Troisième rangée : correction stats -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <a href="/jobs/?filter=completed" class="text-decoration-none">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Corrigés</div>
+                    <div class="value">11</div>
+                    <div class="duration"><i class="bi bi-percent"></i> 78,6% du total</div>
+                </div>
+                <div class="icon" style="background: rgba(255, 211, 66, 0.15); color: #ffd342;">
+                    <i class="bi bi-pencil-square"></i>
+                </div>
+            </div>
+        </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Taux d'erreur moyen</div>
+                    <div class="value" style="color: #51cf66;">2,8%</div>
+                    <div class="duration"><i class="bi bi-graph-down"></i>  car. corrigés</div>
+                </div>
+                <div class="icon" style="background: rgba(255, 107, 107, 0.15); color: #ff6b6b;">
+                    <i class="bi bi-bug"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Mots corrigés (moy.)</div>
+                    <div class="value">2,2</div>
+                    <div class="duration"><i class="bi bi-arrow-left-right"></i> par transcription</div>
+                </div>
+                <div class="icon" style="background: rgba(13, 202, 240, 0.15); color: #22b8cf;">
+                    <i class="bi bi-sort-numeric-up"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="label">Précision globale</div>
+                    <div class="value" style="color: #51cf66;"></div>
+                    <div class="duration"><i class="bi bi-check2-all"></i> car. originaux</div>
+                </div>
+                <div class="icon" style="background: rgba(40, 167, 69, 0.15); color: #51cf66;">
+                    <i class="bi bi-shield-check"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Graphiques correction -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-pencil-square"></i> Taux d'erreur par transcription</div>
+            <div class="chart-container">
+                <canvas id="correctionChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card-panel">
+            <div class="panel-title"><i class="bi bi-arrow-left-right"></i> Original vs Corrigé (caractères)</div>
+            <div class="chart-container">
+                <canvas id="corrCompareChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<div class="card-panel">
+    <div class="panel-title"><i class="bi bi-clock-history"></i> Transcriptions récentes</div>
+    <div class="table-responsive">
+        <table class="table table-dark table-hover">
+            <thead><tr>
+                <th>Nom</th><th>Langue</th><th>Audio</th><th>Analyse</th><th>Mots</th><th>Caract.</th><th>Statut</th><th>Actions</th>
+            </tr></thead>
+            <tbody>
+            
+            <tr>
+                <td><a href="/jobs/6b8e06ea-1f83-4fe9-a63c-2b12ff62c286/" class="text-white text-decoration-none">test 9 music.wav</a></td>
+                <td><span class="badge badge-completed">French</span></td>
+                <td class="duration">30,2s</td>
+                <td class="duration">3,8s</td>
+                <td>37</td>
+                <td>208</td>
+                <td><span class="badge badge-completed">Terminé</span></td>
+                <td><a href="/jobs/6b8e06ea-1f83-4fe9-a63c-2b12ff62c286/" class="btn btn-sm btn-outline-light">Voir</a></td>
+            </tr>
+            
+            <tr>
+                <td><a href="/jobs/94cf34b0-bb20-495a-b2d7-118b1a0de952/" class="text-white text-decoration-none">test 8 music.wav</a></td>
+                <td><span class="badge badge-completed">French</span></td>
+                <td class="duration">29,7s</td>
+                <td class="duration">3,7s</td>
+                <td>45</td>
+                <td>233</td>
+                <td><span class="badge badge-completed">Terminé</span></td>
+                <td><a href="/jobs/94cf34b0-bb20-495a-b2d7-118b1a0de952/" class="btn btn-sm btn-outline-light">Voir</a></td>
+            </tr>
+            
+            <tr>
+                <td><a href="/jobs/ebe01659-778f-47ad-8100-5283498edafb/" class="text-white text-decoration-none">test 7.wav</a></td>
+                <td><span class="badge badge-completed">French</span></td>
+                <td class="duration">33,8s</td>
+                <td class="duration">5,0s</td>
+                <td>37</td>
+                <td>219</td>
+                <td><span class="badge badge-completed">Terminé</span></td>
+                <td><a href="/jobs/ebe01659-778f-47ad-8100-5283498edafb/" class="btn btn-sm btn-outline-light">Voir</a></td>
+            </tr>
+            
+            <tr>
+                <td><a href="/jobs/cbfeeae7-2412-4735-aeb0-868a2e5ee4c1/" class="text-white text-decoration-none">test 6.wav</a></td>
+                <td><span class="badge badge-completed">French</span></td>
+                <td class="duration">30,2s</td>
+                <td class="duration">3,8s</td>
+                <td>37</td>
+                <td>186</td>
+                <td><span class="badge badge-completed">Terminé</span></td>
+                <td><a href="/jobs/cbfeeae7-2412-4735-aeb0-868a2e5ee4c1/" class="btn btn-sm btn-outline-light">Voir</a></td>
+            </tr>
+            
+            <tr>
+                <td><a href="/jobs/4dbfde21-143e-4089-8fec-17a1c795ecc1/" class="text-white text-decoration-none">test 4.wav</a></td>
+                <td><span class="badge badge-completed">French</span></td>
+                <td class="duration">36,1s</td>
+                <td class="duration">3,6s</td>
+                <td>35</td>
+                <td>180</td>
+                <td><span class="badge badge-completed">Terminé</span></td>
+                <td><a href="/jobs/4dbfde21-143e-4089-8fec-17a1c795ecc1/" class="btn btn-sm btn-outline-light">Voir</a></td>
+            </tr>
+            
+            <tr>
+                <td><a href="/jobs/075ec22f-fee5-4b3c-8a26-77c54f28b135/" class="text-white text-decoration-none">test 3.wav</a></td>
+                <td><span class="badge badge-completed">French</span></td>
+                <td class="duration">29,7s</td>
+                <td class="duration">2,6s</td>
+                <td>30</td>
+                <td>159</td>
+                <td><span class="badge badge-completed">Terminé</span></td>
+                <td><a href="/jobs/075ec22f-fee5-4b3c-8a26-77c54f28b135/" class="btn btn-sm btn-outline-light">Voir</a></td>
+            </tr>
+            
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    
+<script>
+const series = [{"label": "28/08", "count": 0, "audio_min": 0, "process_min": 0, "words": 0, "chars": 0}, {"label": "29/08", "count": 0, "audio_min": 0, "process_min": 0, "words": 0, "chars": 0}, {"label": "30/08", "count": 0, "audio_min": 0, "process_min": 0, "words": 0, "chars": 0}, {"label": "31/08", "count": 0, "audio_min": 0, "process_min": 0, "words": 0, "chars": 0}, {"label": "01/09", "count": 0, "audio_min": 0, "process_min": 0, "words": 0, "chars": 0}, {"label": "02/09", "count": 0, "audio_min": 0, "process_min": 0, "words": 0, "chars": 0}, {"label": "03/09", "count": 14, "audio_min": 7.3, "process_min": 1.2, "words": 533, "chars": 2907}];
+const langData = [{"lang": "French", "count": 14}];
+const jobsData = [{"name": "test 4.wav", "audio_sec": 36.1, "process_sec": 3.6, "words": 35, "chars": 180}, {"name": "test 6.wav", "audio_sec": 30.2, "process_sec": 3.8, "words": 37, "chars": 186}, {"name": "test 7.wav", "audio_sec": 33.8, "process_sec": 5.0, "words": 37, "chars": 219}, {"name": "test 8 music.wav", "audio_sec": 29.7, "process_sec": 3.7, "words": 45, "chars": 233}, {"name": "test 9 music.wav", "audio_sec": 30.2, "process_sec": 3.8, "words": 37, "chars": 208}];
+const corrData = [{"name": "test 9 music.wav", "orig_chars": 208, "corr_chars": 224, "orig_words": 37, "corr_words": 39, "char_diff": 16, "word_diff": 2, "error_pct": 7.7}, {"name": "test 8 music.wav", "orig_chars": 233, "corr_chars": 244, "orig_words": 45, "corr_words": 47, "char_diff": 11, "word_diff": 2, "error_pct": 4.7}, {"name": "test 6.wav", "orig_chars": 186, "corr_chars": 188, "orig_words": 37, "corr_words": 42, "char_diff": 2, "word_diff": 5, "error_pct": 1.1}, {"name": "test 4.wav", "orig_chars": 180, "corr_chars": 177, "orig_words": 35, "corr_words": 35, "char_diff": 3, "word_diff": 0, "error_pct": 1.7}, {"name": "test 3.wav", "orig_chars": 159, "corr_chars": 155, "orig_words": 30, "corr_words": 29, "char_diff": 4, "word_diff": 1, "error_pct": 2.5}, {"name": "test 13 music.wav", "orig_chars": 176, "corr_chars": 176, "orig_words": 28, "corr_words": 26, "char_diff": 0, "word_diff": 2, "error_pct": 0.0}, {"name": "test 12 music.wav", "orig_chars": 353, "corr_chars": 330, "orig_words": 65, "corr_words": 61, "char_diff": 23, "word_diff": 4, "error_pct": 6.5}, {"name": "test 11 music.wav", "orig_chars": 224, "corr_chars": 221, "orig_words": 41, "corr_words": 36, "char_diff": 3, "word_diff": 5, "error_pct": 1.3}, {"name": "test 10 music.wav", "orig_chars": 318, "corr_chars": 318, "orig_words": 53, "corr_words": 53, "char_diff": 0, "word_diff": 0, "error_pct": 0.0}, {"name": "Dialogue se présenter en ...", "orig_chars": 37, "corr_chars": 36, "orig_words": 5, "corr_words": 7, "char_diff": 1, "word_diff": 2, "error_pct": 2.7}, {"name": "phrases pour apprendre à ...", "orig_chars": 237, "corr_chars": 239, "orig_words": 45, "corr_words": 46, "char_diff": 2, "word_diff": 1, "error_pct": 0.8}];
+
+// Graphique activité 7 jours (barres groupées)
+new Chart(document.getElementById('activityChart'), {
+    type: 'bar',
+    data: {
+        labels: series.map(s => s.label),
+        datasets: [
+            { label: 'Transcriptions', data: series.map(s => s.count), backgroundColor: 'rgba(233, 69, 96, 0.7)', borderRadius: 4 },
+            { label: 'Min audio', data: series.map(s => s.audio_min), backgroundColor: 'rgba(13, 202, 240, 0.5)', borderRadius: 4 }
+        ]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+            x: { ticks: { color: 'rgba(255,255,255,0.5)' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+            y: { ticks: { color: 'rgba(255,255,255,0.5)' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+        },
+        plugins: { legend: { labels: { color: 'rgba(255,255,255,0.7)' } } }
+    }
+});
+
+// Graphique langues (donut)
+new Chart(document.getElementById('langChart'), {
+    type: 'doughnut',
+    data: {
+        labels: langData.map(l => l.lang),
+        datasets: [{ data: langData.map(l => l.count), backgroundColor: ['#e94560','#22b8cf','#51cf66','#ffd43b','#845ef7','#ff922b','#20c997','#f06595'] }]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { color: 'rgba(255,255,255,0.7)', padding: 12 } } }
+    }
+});
+
+// Graphique comparaison temps analyse vs durée audio
+new Chart(document.getElementById('timeCompareChart'), {
+    type: 'bar',
+    data: {
+        labels: jobsData.map(j => j.name),
+        datasets: [
+            {
+                label: 'Durée audio (s)',
+                data: jobsData.map(j => j.audio_sec),
+                backgroundColor: 'rgba(13, 202, 240, 0.7)',
+                borderRadius: 4
+            },
+            {
+                label: "Temps d'analyse (s)",
+                data: jobsData.map(j => j.process_sec),
+                backgroundColor: 'rgba(255, 146, 43, 0.7)',
+                borderRadius: 4
+            }
+        ]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        indexAxis: 'y',
+        scales: {
+            x: { ticks: { color: 'rgba(255,255,255,0.5)' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+            y: { ticks: { color: 'rgba(255,255,255,0.5)', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+        },
+        plugins: { legend: { labels: { color: 'rgba(255,255,255,0.7)' } } }
+    }
+});
+
+// Graphique mots & caractères par job
+new Chart(document.getElementById('wordsCharsChart'), {
+    type: 'bar',
+    data: {
+        labels: jobsData.map(j => j.name),
+        datasets: [
+            {
+                label: 'Mots',
+                data: jobsData.map(j => j.words),
+                backgroundColor: 'rgba(132, 94, 247, 0.7)',
+                borderRadius: 4
+            },
+            {
+                label: 'Caractères',
+                data: jobsData.map(j => j.chars),
+                backgroundColor: 'rgba(240, 101, 149, 0.5)',
+                borderRadius: 4
+            }
+        ]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        indexAxis: 'y',
+        scales: {
+            x: { ticks: { color: 'rgba(255,255,255,0.5)' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+            y: { ticks: { color: 'rgba(255,255,255,0.5)', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+        },
+        plugins: { legend: { labels: { color: 'rgba(255,255,255,0.7)' } } }
+    }
+});
+
+// Graphique taux d'erreur par correction (barres)
+if (corrData.length > 0) {
+    new Chart(document.getElementById('correctionChart'), {
+        type: 'bar',
+        data: {
+            labels: corrData.map(c => c.name),
+            datasets: [{
+                label: 'Taux d\'erreur (%)',
+                data: corrData.map(c => c.error_pct),
+                backgroundColor: corrData.map(c => c.error_pct < 5 ? 'rgba(81, 207, 102, 0.7)' : c.error_pct < 15 ? 'rgba(255, 212, 59, 0.7)' : 'rgba(255, 107, 107, 0.7)'),
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: {
+                x: { ticks: { color: 'rgba(255,255,255,0.5)', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                y: { ticks: { color: 'rgba(255,255,255,0.5)' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+            },
+            plugins: { legend: { labels: { color: 'rgba(255,255,255,0.7)' } } }
+        }
+    });
+} else {
+    document.getElementById('correctionChart').parentElement.innerHTML = '<div class="text-center text-muted py-5"><i class="bi bi-pencil-square" style="font-size:2rem;"></i><br>Aucune correction pour le moment</div>';
+}
+
+// Graphique original vs corrigé (barres groupées)
+if (corrData.length > 0) {
+    new Chart(document.getElementById('corrCompareChart'), {
+        type: 'bar',
+        data: {
+            labels: corrData.map(c => c.name),
+            datasets: [
+                { label: 'Original (car.)', data: corrData.map(c => c.orig_chars), backgroundColor: 'rgba(255, 107, 107, 0.6)', borderRadius: 4 },
+                { label: 'Corrigé (car.)', data: corrData.map(c => c.corr_chars), backgroundColor: 'rgba(81, 207, 102, 0.6)', borderRadius: 4 }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: {
+                x: { ticks: { color: 'rgba(255,255,255,0.5)', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                y: { ticks: { color: 'rgba(255,255,255,0.5)' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+            },
+            plugins: { legend: { labels: { color: 'rgba(255,255,255,0.7)' } } }
+        }
+    });
+} else {
+    document.getElementById('corrCompareChart').parentElement.innerHTML = '<div class="text-center text-muted py-5"><i class="bi bi-arrow-left-right" style="font-size:2rem;"></i><br>Aucune correction pour le moment</div>';
+}
+
+</body>
+</html>

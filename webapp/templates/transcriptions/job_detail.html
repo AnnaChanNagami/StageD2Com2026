@@ -1,0 +1,440 @@
+{% extends "transcriptions/base.html" %}
+{% load static %}
+{% block title %}{{ job.original_name }} — Qwen3-ASR{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <div>
+            <div class="flex items-center gap-3 mb-2">
+                <span class="px-3 py-1 bg-sky-50 text-sky-700 border border-sky-200 rounded-lg text-xs font-bold uppercase tracking-wide">
+                    {{ job.get_status_display }}
+                </span>
+                {% if job.language_detected %}
+                <span class="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold flex items-center gap-1.5">
+                    <i class="bi bi-translate"></i> {{ job.language_detected }}
+                </span>
+                {% endif %}
+            </div>
+            <h1 class="text-2xl font-extrabold text-marine break-all">{{ job.original_name }}</h1>
+            <p class="text-xs text-slate-400 mt-1 flex items-center gap-3">
+                <span><i class="bi bi-calendar"></i> {{ job.created_at|date:"d/m/Y H:i" }}</span>
+                {% if job.duration_sec %}<span><i class="bi bi-clock"></i> {{ duration_min }} min ({{ job.duration_sec|floatformat:1 }}s)</span>{% endif %}
+            </p>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="{% url 'transcriptions:job_list' %}" class="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2 shadow-sm">
+                <i class="bi bi-arrow-left"></i> Retour
+            </a>
+            {% if job.status == "completed" %}
+            <a href="{% url 'transcriptions:correction' job.id %}" class="px-4 py-2 bg-azur text-white rounded-xl text-sm font-semibold hover:bg-marine transition-colors flex items-center gap-2 shadow-sm">
+                <i class="bi bi-pencil-square"></i> Corriger
+            </a>
+            {% endif %}
+            <form method="POST" action="{% url 'transcriptions:delete_job' job.id %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" onclick="return confirm('Supprimer cette transcription ?')" class="px-3 py-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl text-sm hover:bg-rose-100 transition-colors">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    {% if job.status == "completed" %}
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl font-bold">
+                <i class="bi bi-mic"></i>
+            </div>
+            <div>
+                <div class="text-xl font-bold text-marine">{{ job.duration_sec|floatformat:1 }}s</div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Durée audio</div>
+            </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl font-bold">
+                <i class="bi bi-cpu"></i>
+            </div>
+            <div>
+                <div class="text-xl font-bold text-marine">{{ job.elapsed_sec|floatformat:1 }}s <span class="text-xs font-normal text-slate-400">(x{{ job.ratio_audio|floatformat:1 }})</span></div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Temps d'analyse</div>
+            </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-xl font-bold">
+                <i class="bi bi-fonts"></i>
+            </div>
+            <div>
+                <div class="text-xl font-bold text-marine">{{ job.total_words }}</div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Mots transcrits</div>
+            </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-xl font-bold">
+                <i class="bi bi-type"></i>
+            </div>
+            <div>
+                <div class="text-xl font-bold text-marine">{{ job.total_chars }}</div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Caractères</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <h3 class="text-sm font-bold text-marine mb-4 flex items-center gap-2">
+                <i class="bi bi-speedometer2 text-azur"></i> Analyse vs Audio
+            </h3>
+            <div class="h-48 relative">
+                <canvas id="ratioChart"></canvas>
+            </div>
+        </div>
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <h3 class="text-sm font-bold text-marine mb-4 flex items-center gap-2">
+                <i class="bi bi-bar-chart text-purple-600"></i> Volume (Mots / Caractères)
+            </h3>
+            <div class="h-48 relative">
+                <canvas id="wcChart"></canvas>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- Colonne principale (2/3) -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Transcription principale -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                <div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+                    <h3 class="text-sm font-bold uppercase tracking-widest text-marine flex items-center gap-2">
+                        <i class="bi bi-file-text text-azur"></i> Transcription complète
+                    </h3>
+                    <span class="text-xs text-slate-400 font-medium">{{ job.total_words }} mots</span>
+                </div>
+
+                {% if job.transcript_text %}
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-100 text-slate-800 text-base leading-relaxed max-h-[500px] overflow-y-auto whitespace-pre-wrap font-sans">
+                    {{ job.transcript_text }}
+                </div>
+                {% elif job.status == "running" %}
+                <div class="text-center py-12">
+                    <div class="inline-block w-10 h-10 border-4 border-azur border-t-transparent rounded-full animate-spin"></div>
+                    <p class="text-slate-600 font-medium mt-4">Transcription en cours…</p>
+                    <div class="w-64 h-2 bg-slate-100 rounded-full mx-auto mt-4 overflow-hidden">
+                        <div class="h-full bg-azur transition-all duration-300" id="progressBar" style="width: {{ job.progress|floatformat:0 }}%;"></div>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-slate-400 text-center py-8">En attente de transcription...</p>
+                {% endif %}
+            </div>
+
+            <!-- Segments horodatés -->
+            {% if segments %}
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                <div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+                    <h3 class="text-sm font-bold uppercase tracking-widest text-marine flex items-center gap-2">
+                        <i class="bi bi-list-ol text-azur"></i> Segments horodatés
+                    </h3>
+                    <span class="text-xs text-slate-400 font-medium">{{ segments|length }} segment(s)</span>
+                </div>
+                <div class="max-h-96 overflow-y-auto space-y-2 pr-2" id="segmentsContainer">
+                    {% for seg in segments %}
+                    <div class="segment-item p-3 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-100 transition-colors flex items-start gap-4 cursor-pointer" data-start="{{ seg.start }}" data-end="{{ seg.end }}">
+                        <span class="px-2.5 py-1 bg-white border border-slate-200 text-azur rounded-lg text-xs font-mono font-bold shrink-0">
+                            {{ seg.start|floatformat:2 }}s
+                        </span>
+                        <span class="text-sm text-slate-700 leading-relaxed pt-0.5">{{ seg.text }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Erreur éventuelle -->
+            {% if job.error %}
+            <div class="bg-rose-50 border border-rose-200 rounded-2xl p-6 text-rose-800">
+                <h3 class="font-bold mb-2 flex items-center gap-2"><i class="bi bi-exclamation-triangle"></i> Erreur lors du traitement</h3>
+                <pre class="whitespace-pre-wrap text-sm font-mono">{{ job.error }}</pre>
+            </div>
+            {% endif %}
+
+            <!-- Texte corrigé -->
+            {% if job.corrected_text %}
+            <div class="bg-white rounded-2xl border border-emerald-200 shadow-sm p-6">
+                <div class="flex items-center justify-between mb-4 border-b border-emerald-100 pb-3">
+                    <h3 class="text-sm font-bold uppercase tracking-widest text-emerald-700 flex items-center gap-2">
+                        <i class="bi bi-pencil-square"></i> Texte Corrigé
+                    </h3>
+                    <span class="text-xs text-slate-400 font-medium">{{ job.corrected_at|date:"d/m/Y H:i" }}</span>
+                </div>
+                <div class="p-4 bg-emerald-50/40 rounded-xl border border-emerald-100 text-marine text-base leading-relaxed max-h-[400px] overflow-y-auto whitespace-pre-wrap font-sans">
+                    {{ job.corrected_text }}
+                </div>
+            </div>
+
+            <!-- Comparatif diff -->
+            <div class="bg-white rounded-2xl border border-purple-200 shadow-sm p-6">
+                <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4 border-b border-purple-100 pb-3">
+                    <h3 class="text-sm font-bold uppercase tracking-widest text-purple-700 flex items-center gap-2">
+                        <i class="bi bi-arrow-left-right"></i> Comparatif Qwen vs Correction
+                    </h3>
+                    <div class="flex items-center gap-3">
+                        <span id="diffStats" class="text-xs text-slate-500 font-medium"></span>
+                        <div class="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50 text-xs">
+                            <button class="px-2.5 py-1 rounded-md font-semibold text-slate-700 active bg-white shadow-sm" id="btnDiffWord" onclick="setDiffMode('word')">Mots</button>
+                            <button class="px-2.5 py-1 rounded-md font-semibold text-slate-700" id="btnDiffChar" onclick="setDiffMode('char')">Car.</button>
+                            <button class="px-2.5 py-1 rounded-md font-semibold text-slate-700" id="btnDiffLine" onclick="setDiffMode('line')">Lignes</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap gap-4 items-center justify-between mb-4 text-xs">
+                    <div class="flex gap-3">
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-emerald-100 border border-emerald-300 inline-block"></span> Ajouté</span>
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-rose-100 border border-rose-300 inline-block"></span> Supprimé</span>
+                    </div>
+                    <div class="inline-flex gap-1">
+                        <button class="px-2 py-1 bg-white border border-slate-200 rounded text-slate-700 font-semibold active shadow-sm" id="btnShowAll" onclick="setDiffFilter('all')">Tout afficher</button>
+                        <button class="px-2 py-1 bg-white border border-slate-200 rounded text-slate-700 font-semibold shadow-sm" id="btnShowChanges" onclick="setDiffFilter('changes')">Modifications seules</button>
+                    </div>
+                </div>
+
+                <div id="diffOutput" class="p-4 bg-slate-50 rounded-xl border border-slate-200 text-slate-800 text-sm leading-relaxed max-h-[400px] overflow-y-auto whitespace-pre-wrap font-mono"></div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Colonne latérale (1/3) -->
+        <div class="space-y-6">
+            <!-- Player Audio -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                <h3 class="text-sm font-bold uppercase tracking-widest text-marine mb-4 flex items-center gap-2">
+                    <i class="bi bi-play-circle text-azur"></i> Lecture Audio
+                </h3>
+                {% if job.audio_file %}
+                <audio controls class="w-full mb-4">
+                    <source src="{{ job.audio_file.url }}" type="audio/mpeg">
+                    <source src="{{ job.audio_file.url }}" type="audio/wav">
+                    Votre navigateur ne supporte pas l'élément audio.
+                </audio>
+                {% else %}
+                <p class="text-slate-400 text-sm">Aucun fichier audio associé.</p>
+                {% endif %}
+                <div class="text-xs text-slate-500 space-y-1 pt-2 border-t border-slate-100">
+                    {% if job.device %}<div><i class="bi bi-gpu-card text-azur"></i> Appareil : <strong>{{ job.device }}</strong></div>{% endif %}
+                </div>
+            </div>
+
+            <!-- Export -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                <h3 class="text-sm font-bold uppercase tracking-widest text-marine mb-4 flex items-center gap-2">
+                    <i class="bi bi-download text-azur"></i> Téléchargements
+                </h3>
+                {% if job.status == "completed" %}
+                <div class="space-y-2">
+                    <a href="{% url 'transcriptions:download_txt' job.id %}" class="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-marine transition-colors flex items-center justify-between">
+                        <span><i class="bi bi-filetype-txt text-lg text-slate-500 me-2"></i> Fichier TXT</span>
+                        <i class="bi bi-download text-slate-400"></i>
+                    </a>
+                    {% if segments %}
+                    <a href="{% url 'transcriptions:download_srt' job.id %}" class="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-marine transition-colors flex items-center justify-between">
+                        <span><i class="bi bi-closed-captioning text-lg text-sky-500 me-2"></i> Sous-titres SRT</span>
+                        <i class="bi bi-download text-slate-400"></i>
+                    </a>
+                    <a href="{% url 'transcriptions:download_json' job.id %}" class="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-marine transition-colors flex items-center justify-between">
+                        <span><i class="bi bi-filetype-json text-lg text-purple-500 me-2"></i> Données JSON</span>
+                        <i class="bi bi-download text-slate-400"></i>
+                    </a>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="text-slate-400 text-sm text-center py-2">Disponible après la fin de la transcription.</p>
+                {% endif %}
+            </div>
+
+            <!-- Métadonnées détaillées -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                <h3 class="text-sm font-bold uppercase tracking-widest text-marine mb-4 flex items-center gap-2">
+                    <i class="bi bi-info-circle text-azur"></i> Métadonnées
+                </h3>
+                <div class="space-y-2 text-xs">
+                    <div class="flex justify-between py-1.5 border-b border-slate-100"><span class="text-slate-400">ID Job</span><span class="font-mono text-slate-700 truncate max-w-[150px]" title="{{ job.id }}">{{ job.id }}</span></div>
+                    <div class="flex justify-between py-1.5 border-b border-slate-100"><span class="text-slate-400">Modèle</span><span class="font-semibold text-marine">Qwen3-ASR</span></div>
+                    <div class="flex justify-between py-1.5 border-b border-slate-100"><span class="text-slate-400">Langue</span><span class="font-semibold text-marine">{{ job.language_detected|default:"Auto" }}</span></div>
+                    <div class="flex justify-between py-1.5 border-b border-slate-100"><span class="text-slate-400">Mots</span><span class="font-semibold text-marine">{{ job.total_words }}</span></div>
+                    <div class="flex justify-between py-1.5 border-b border-slate-100"><span class="text-slate-400">Caractères</span><span class="font-semibold text-marine">{{ job.total_chars }}</span></div>
+                    <div class="flex justify-between py-1.5 border-b border-slate-100"><span class="text-slate-400">Segments</span><span class="font-semibold text-marine">{{ job.segment_count }}</span></div>
+                    <div class="flex justify-between py-1.5"><span class="text-slate-400">Tokens générés</span><span class="font-semibold text-marine">{{ job.generated_tokens|default:"—" }}</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+{% if job.status == "running" %}
+const jobId = '{{ job.id }}';
+setInterval(async () => {
+    try {
+        const r = await fetch('/api/status/' + jobId + '/');
+        const d = await r.json();
+        const bar = document.getElementById('progressBar');
+        if (bar) bar.style.width = d.progress + '%';
+        if (d.status === 'completed' || d.status === 'failed') window.location.reload();
+    } catch(e) {}
+}, 2000);
+{% endif %}
+
+{% if job.status == "completed" %}
+// Chart Ratio
+new Chart(document.getElementById('ratioChart'), {
+    type: 'doughnut',
+    data: {
+        labels: ['Durée audio', 'Temps analyse'],
+        datasets: [{
+            data: [{{ job.duration_sec|default:0|floatformat:1 }}, {{ job.elapsed_sec|default:0|floatformat:1 }}],
+            backgroundColor: ['#2e5496', '#ff922b'],
+            borderWidth: 0
+        }]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false, cutout: '70%',
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } }
+    }
+});
+
+// Chart Words / Chars
+new Chart(document.getElementById('wcChart'), {
+    type: 'bar',
+    data: {
+        labels: ['Mots', 'Caractères'],
+        datasets: [{
+            data: [{{ job.total_words }}, {{ job.total_chars }}],
+            backgroundColor: ['#845ef7', '#f06595'],
+            borderRadius: 6, barThickness: 40
+        }]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { grid: { display: false } },
+            y: { grid: { color: '#f1f5f9' } }
+        }
+    }
+});
+{% endif %}
+
+{% if job.corrected_text %}
+// Diff engine
+const originalFull = `{{ job.transcript_text|escapejs }}`;
+const correctedFull = `{{ job.corrected_text|escapejs }}`;
+let diffMode = 'word';
+let diffFilter = 'all';
+
+function esc(html) {
+    const d = document.createElement('div');
+    d.textContent = html;
+    return d.innerHTML;
+}
+
+function renderDiff(parts) {
+    let html = '';
+    parts.forEach(p => {
+        if (p.added) {
+            html += '<span class="bg-emerald-100 text-emerald-800 px-0.5 rounded">' + esc(p.value) + '</span>';
+        } else if (p.removed) {
+            html += '<span class="bg-rose-100 text-rose-800 px-0.5 rounded line-through">' + esc(p.value) + '</span>';
+        } else {
+            html += '<span>' + esc(p.value) + '</span>';
+        }
+    });
+    return html;
+}
+
+function renderDiffLine(parts) {
+    let html = '';
+    parts.forEach(p => {
+        const lines = p.value.split('\n');
+        lines.forEach((l, i) => {
+            if (l !== '' || i > 0) {
+                if (p.added) html += '<div class="bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded my-0.5">+' + esc(l || ' ') + '</div>';
+                else if (p.removed) html += '<div class="bg-rose-50 text-rose-800 px-2 py-0.5 rounded my-0.5 line-through">-' + esc(l || ' ') + '</div>';
+                else html += '<div class="px-2 py-0.5 text-slate-700">' + esc(l || ' ') + '</div>';
+            }
+        });
+    });
+    return html;
+}
+
+function applyDiff() {
+    let parts;
+    if (diffMode === 'word') parts = Diff.diffWords(originalFull, correctedFull);
+    else if (diffMode === 'char') parts = Diff.diffChars(originalFull, correctedFull);
+    else parts = Diff.diffLines(originalFull, correctedFull);
+
+    let stats = { charsAdded: 0, charsRemoved: 0 };
+    parts.forEach(p => {
+        if (p.added) stats.charsAdded += p.value.length;
+        if (p.removed) stats.charsRemoved += p.value.length;
+    });
+
+    let display = (diffFilter === 'changes') ? parts.filter(p => p.added || p.removed) : parts;
+
+    document.getElementById('diffOutput').innerHTML = (diffMode === 'line') ? renderDiffLine(display) : renderDiff(display);
+    document.getElementById('diffStats').innerHTML = '+' + stats.charsAdded + ' ajouts, −' + stats.charsRemoved + ' suppressions';
+}
+
+function setDiffMode(mode) {
+    diffMode = mode;
+    ['Word', 'Char', 'Line'].forEach(m => {
+        const btn = document.getElementById('btnDiff' + m);
+        if (btn) btn.classList.toggle('bg-white', mode.toLowerCase() === m.toLowerCase());
+        if (btn) btn.classList.toggle('shadow-sm', mode.toLowerCase() === m.toLowerCase());
+    });
+    applyDiff();
+}
+
+function setDiffFilter(filter) {
+    diffFilter = filter;
+    document.getElementById('btnShowAll').classList.toggle('bg-white', filter === 'all');
+    document.getElementById('btnShowChanges').classList.toggle('bg-white', filter === 'changes');
+    applyDiff();
+}
+
+applyDiff();
+{% endif %}
+
+// Audio sync to segments
+const audio = document.querySelector('audio');
+const segs = document.querySelectorAll('.segment-item');
+if (audio && segs.length) {
+    segs.forEach(s => {
+        s.addEventListener('click', () => {
+            audio.currentTime = parseFloat(s.dataset.start);
+            audio.play();
+        });
+    });
+    audio.addEventListener('timeupdate', () => {
+        const t = audio.currentTime;
+        segs.forEach(s => {
+            const start = parseFloat(s.dataset.start), end = parseFloat(s.dataset.end);
+            if (t >= start && t <= end) {
+                s.classList.add('bg-sky-50', 'border-sky-300');
+            } else {
+                s.classList.remove('bg-sky-50', 'border-sky-300');
+            }
+        });
+    });
+}
+</script>
+{% endblock %}

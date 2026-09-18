@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scribe AI Agent</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --primary: #6366f1;
+            --glow: rgba(99, 102, 241, 0.5);
+        }
+        body { margin: 0; background: var(--bg); display: flex; justify-content: center; align-items: center; height: 100vh; font-family: 'Segoe UI', sans-serif; color: white; }
+        #app { text-align: center; }
+        .btn-container { position: relative; width: 200px; height: 200px; }
+        #main-btn {
+            width: 100px; height: 100px; border-radius: 50%; border: none;
+            background: var(--primary); color: white; cursor: pointer;
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 0 20px var(--glow); font-weight: bold;
+        }
+        #main-btn.listening { transform: scale(1.5); background: #ef4444; }
+        #main-btn.processing { animation: spin 2s linear infinite; border-top: 5px solid white; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #radial-menu { display: none; position: absolute; top: -50px; left: -50px; }
+        .radial-btn { position: absolute; width: 40px; height: 40px; border-radius: 50%; border: none; background: #334155; color: white; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="btn-container">
+            <button id="main-btn">PARLER</button>
+            <div id="radial-menu">
+                <button class="radial-btn" style="top: 0; left: 50px;" onclick="reset()">↺</button>
+                <button class="radial-btn" style="top: 50px; left: 0;" onclick="copyText()">📋</button>
+            </div>
+        </div>
+        <p id="status">Prêt</p>
+    </div>
+
+    <script>
+        const btn = document.getElementById('main-btn');
+        const status = document.getElementById('status');
+        let recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+        let isListening = false;
+
+        recognition.lang = 'fr-FR';
+
+        btn.onclick = () => {
+            if (isListening) {
+                recognition.stop();
+                btn.className = '';
+                status.innerText = "Traitement...";
+            } else {
+                recognition.start();
+                btn.className = 'listening';
+                status.innerText = "Écoute...";
+            }
+            isListening = !isListening;
+        };
+
+        recognition.onresult = (e) => {
+            const transcript = e.results[0][0].transcript;
+            status.innerText = "Réponse: " + transcript;
+            speak(transcript);
+        };
+
+        function speak(text) {
+            btn.className = 'processing';
+            const synth = window.speechSynthesis;
+            const utter = new SpeechSynthesisUtterance(text);
+            utter.onend = () => { btn.className = ''; status.innerText = "Prêt"; };
+            synth.speak(utter);
+        }
+
+        btn.oncontextmenu = (e) => {
+            e.preventDefault();
+            document.getElementById('radial-menu').style.display = 'block';
+        };
+
+        function reset() { location.reload(); }
+        function copyText() { navigator.clipboard.writeText(status.innerText); alert('Copié !'); }
+    </script>
+</body>
+</html>

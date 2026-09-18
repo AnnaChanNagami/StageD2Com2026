@@ -1,0 +1,41 @@
+:root {
+    --color-marine: #1f3864;
+    --color-azur: #2e5496;
+    --sidebar-width: 260px;
+}
+
+body {
+    background-color: #f8fafc;
+    color: #1f3864;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+/* Animations de cadence-suivi-atelier */
+@keyframes pulsation {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.15); opacity: 0.75; }
+}
+.micro-actif {
+    animation: pulsation 0.9s ease-in-out infinite;
+}
+
+/* Sidebar styling */
+.sidebar {
+    width: var(--sidebar-width);
+    height: 100vh;
+    background: #ffffff;
+    border-right: 1px solid #e2e8f0;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1000;
+}
+.main-content {
+    margin-left: var(--sidebar-width);
+    padding: 2rem;
+}
+
+.nav-link.active {
+    background-color: var(--color-marine) !important;
+    color: white !important;
+}

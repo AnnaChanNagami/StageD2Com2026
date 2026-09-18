@@ -1,0 +1,16 @@
+{
+  "name": "scribe-frontend",
+  "version": "1.0.0",
+  "description": "Frontend TypeScript pour Scribe (Qwen3-ASR) — compilation vers webapp/static/ts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json --watch",
+    "cli": "node --experimental-strip-types backend/cli.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.6.0"
+  }
+}

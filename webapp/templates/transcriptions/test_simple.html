@@ -1,0 +1,47 @@
+{% load static %}<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Scribe AI Agent</title>
+    <style>
+        body { background: #0f172a; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: sans-serif; }
+        #main-btn { width: 180px; height: 180px; border-radius: 50%; border: none; background: #6366f1; color: white; font-weight: 800; cursor: pointer; z-index: 10; transition: all 0.2s; }
+        #main-btn:active { transform: scale(0.95); }
+        #radial-menu { display: none; position: absolute; gap: 10px; margin-top: 20px; }
+        .radial-btn { padding: 15px; border-radius: 50%; background: #334155; color: white; border: none; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <button id="main-btn">PARLER</button>
+    <div id="radial-menu">
+        <button class="radial-btn" onclick="location.reload()">↺</button>
+        <button class="radial-btn" onclick="copyText()">📋</button>
+    </div>
+    <p id="status">Prêt</p>
+
+    <script>
+        const btn = document.getElementById('main-btn');
+        const menu = document.getElementById('radial-menu');
+        const status = document.getElementById('status');
+        let startTime, timer;
+
+        btn.addEventListener('mousedown', () => {
+            startTime = Date.now();
+            timer = setTimeout(() => {
+                menu.style.display = 'flex';
+                status.innerText = "Menu ouvert";
+            }, 800);
+        });
+
+        btn.addEventListener('mouseup', () => {
+            clearTimeout(timer);
+            if (Date.now() - startTime < 800) {
+                status.innerText = "Clic simple détecté";
+                // Lancer reconnaissance ici
+            }
+        });
+
+        function copyText() { alert('Copier'); menu.style.display = 'none'; }
+    </script>
+</body>
+</html>

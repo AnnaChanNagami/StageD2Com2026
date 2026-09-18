@@ -1,0 +1,187 @@
+{% extends "transcriptions/base.html" %}
+{% load static %}
+{% block title %}Nouvelle Transcription — Qwen3-ASR{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <!-- Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-extrabold text-marine flex items-center gap-3">
+            <div class="w-12 h-12 rounded-2xl bg-azur/10 text-azur flex items-center justify-center text-2xl">
+                <i class="bi bi-mic-fill"></i>
+            </div>
+            Nouvelle transcription
+        </h1>
+        <p class="text-slate-500 text-sm mt-1 ml-15">Téléversez un fichier audio pour lancer une reconnaissance vocale de haute précision.</p>
+    </div>
+
+    <form id="uploadForm" method="POST" action="{% url 'transcriptions:api_job_create' %}" enctype="multipart/form-data" class="space-y-6">
+        {% csrf_token %}
+        
+        <!-- Zone de dépôt -->
+        <div class="bg-white rounded-3xl border-2 border-dashed border-slate-200 hover:border-azur transition-all p-10 text-center cursor-pointer relative shadow-sm group" id="dropZone" onclick="document.getElementById('audioFile').click()">
+            <div class="w-20 h-20 bg-sky-50 text-azur rounded-full flex items-center justify-center mx-auto mb-4 text-3xl group-hover:scale-110 transition-transform shadow-sm">
+                <i class="bi bi-cloud-arrow-up-fill"></i>
+            </div>
+            <h3 class="text-lg font-bold text-marine mb-1">Glissez-déposez votre fichier audio ici</h3>
+            <p class="text-xs text-slate-400 mb-6">Formats supportés : WAV, MP3, M4A, FLAC, OGG, MP4 (Max 2 Go)</p>
+            <input type="file" id="audioFile" name="audio_file" accept="audio/*" class="hidden">
+            <span class="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-100 hover:bg-azur hover:text-white rounded-xl text-xs font-bold text-slate-700 transition-colors shadow-sm">
+                <i class="bi bi-folder2-open"></i> Parcourir les fichiers
+            </span>
+        </div>
+
+        <!-- Fichier sélectionné (masqué par défaut) -->
+        <div id="fileInfo" class="hidden bg-white p-5 rounded-2xl border border-emerald-200 shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl font-bold">
+                    <i class="bi bi-file-earmark-music-fill"></i>
+                </div>
+                <div>
+                    <div id="fileName" class="font-bold text-marine text-sm"></div>
+                    <div id="fileSize" class="text-xs text-slate-400 mt-0.5"></div>
+                </div>
+            </div>
+            <button type="button" class="w-9 h-9 flex items-center justify-center rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors" onclick="clearFile()">
+                <i class="bi bi-x-lg text-sm"></i>
+            </button>
+        </div>
+
+        <!-- Paramètres avancés -->
+        <div class="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm space-y-6">
+            <h3 class="text-sm font-bold uppercase tracking-widest text-marine flex items-center gap-2 border-b border-slate-100 pb-3">
+                <i class="bi bi-sliders text-azur"></i> Paramètres d'analyse
+            </h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Langue -->
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Langue audio</label>
+                    <select name="language" id="languageSelect" class="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-sm focus:outline-none focus:border-azur font-medium">
+                        <option value="">Auto-détection intelligente</option>
+                        {% for lang in languages %}
+                        <option value="{{ lang }}"{% if lang == default_language %} selected{% endif %}>{{ lang }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Max Tokens -->
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Tokens maximum</label>
+                    <input type="number" name="max_tokens" id="maxTokens" class="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-sm focus:outline-none focus:border-azur font-medium" value="512" min="64" max="2048">
+                </div>
+            </div>
+
+            <!-- Contexte -->
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Contexte ou Mots-clés (optionnel)</label>
+                <textarea name="prompt" id="promptInput" rows="2" class="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-sm focus:outline-none focus:border-azur font-medium" placeholder="Ex: Noms propres, termes techniques, acronymes pour guider le modèle..."></textarea>
+            </div>
+
+            <!-- Timestamps -->
+            <div class="flex items-center gap-3 pt-2">
+                <input type="checkbox" id="timestamps" name="timestamps" value="1" class="w-5 h-5 text-azur rounded border-slate-300 focus:ring-azur">
+                <label for="timestamps" class="text-sm font-semibold text-slate-700 cursor-pointer select-none">
+                    Générer les segments horodatés et sous-titres SRT
+                </label>
+            </div>
+        </div>
+
+        <!-- Bouton de lancement -->
+        <button type="button" id="submitBtn" onclick="submitUpload()" disabled class="w-full py-4 bg-azur text-white font-bold rounded-2xl shadow-lg hover:bg-marine transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+            <i class="bi bi-play-circle-fill text-lg"></i> Lancer la transcription
+        </button>
+    </form>
+
+    <!-- Statut en direct (masqué au départ) -->
+    <div id="statusBox" class="hidden mt-6 bg-white rounded-3xl border border-slate-200 p-8 shadow-sm text-center">
+        <div class="inline-block w-12 h-12 border-4 border-azur border-t-transparent rounded-full animate-spin mb-4"></div>
+        <div id="statusText" class="text-lg font-bold text-marine mb-2">Préparation...</div>
+        <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden max-w-md mx-auto mb-2">
+            <div id="statusBar" class="bg-azur h-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+        <div id="statusDetail" class="text-xs font-semibold text-slate-400">0%</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('audioFile');
+const fileInfo = document.getElementById('fileInfo');
+const submitBtn = document.getElementById('submitBtn');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('border-azur', 'bg-sky-50/50'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('border-azur', 'bg-sky-50/50'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('border-azur', 'bg-sky-50/50'); fileInput.files = e.dataTransfer.files; onFile(); });
+fileInput.addEventListener('change', onFile);
+
+function onFile() {
+    const f = fileInput.files[0];
+    if (!f) { fileInfo.classList.add('hidden'); submitBtn.disabled = true; return; }
+    document.getElementById('fileName').textContent = f.name;
+    document.getElementById('fileSize').textContent = (f.size / (1024*1024)).toFixed(1) + ' Mo';
+    fileInfo.classList.remove('hidden');
+    submitBtn.disabled = false;
+}
+
+function clearFile() {
+    fileInput.value = '';
+    fileInfo.classList.add('hidden');
+    submitBtn.disabled = true;
+}
+
+async function submitUpload() {
+    if (!fileInput.files[0]) return;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></span> Envoi en cours...';
+    
+    const fd = new FormData();
+    fd.append('audio_file', fileInput.files[0]);
+    fd.append('language', document.getElementById('languageSelect').value);
+    fd.append('prompt', document.getElementById('promptInput').value);
+    fd.append('timestamps', document.getElementById('timestamps').checked ? '1' : '');
+    fd.append('max_tokens', document.getElementById('maxTokens').value);
+
+    try {
+        const resp = await fetch("{% url 'transcriptions:api_job_create' %}", { method: 'POST', body: fd });
+        const data = await resp.json();
+        if (data.id) {
+            document.getElementById('uploadForm').classList.add('hidden');
+            pollJob(data.id);
+        } else {
+            alert(data.error || 'Erreur lors de la création de la tâche');
+            resetBtn();
+        }
+    } catch(e) {
+        alert('Erreur réseau : ' + e.message);
+        resetBtn();
+    }
+}
+
+function pollJob(id) {
+    const statusBox = document.getElementById('statusBox');
+    statusBox.classList.remove('hidden');
+    const interval = setInterval(async () => {
+        try {
+            const resp = await fetch('/api/status/' + id + '/');
+            const d = await resp.json();
+            document.getElementById('statusText').textContent = d.status === 'completed' ? '✨ Transcription terminée !' :
+                d.status === 'failed' ? '❌ ' + (d.error || 'Erreur de traitement') : '⏳ ' + (d.stage || d.status);
+            document.getElementById('statusBar').style.width = (d.progress || 10) + '%';
+            document.getElementById('statusDetail').textContent = (d.progress || 10) + '%';
+            if (d.status === 'completed' || d.status === 'failed') {
+                clearInterval(interval);
+                setTimeout(() => { window.location = d.url; }, 800);
+            }
+        } catch(e) {}
+    }, 1500);
+}
+
+function resetBtn() {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i class="bi bi-play-circle-fill text-lg"></i> Lancer la transcription';
+}
+</script>
+{% endblock %}

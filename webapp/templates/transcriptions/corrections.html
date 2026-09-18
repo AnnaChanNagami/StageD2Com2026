@@ -1,0 +1,113 @@
+{% extends "transcriptions/base.html" %}
+{% load humanize %}
+
+{% block title %}Statistiques d'erreurs — Qwen3-ASR{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-marine mb-2">Statistiques d'erreurs</h1>
+            <p class="text-slate-500">Analyse globale et taux d'erreur (WER / CER) par transcription.</p>
+        </div>
+        {% if summary.corrected > 0 %}
+        <a href="?export=csv" class="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-marine hover:bg-slate-50 shadow-sm flex items-center gap-2">
+            <i class="bi bi-download"></i> Exporter CSV
+        </a>
+        {% endif %}
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl font-bold">
+                <i class="bi bi-clipboard-data"></i>
+            </div>
+            <div>
+                <div class="text-2xl font-bold text-marine">{{ summary.total }}</div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Transcriptions</div>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl font-bold">
+                <i class="bi bi-check2-circle"></i>
+            </div>
+            <div>
+                <div class="text-2xl font-bold text-marine">{{ summary.corrected }}</div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Corrigées</div>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl font-bold">
+                <i class="bi bi-fonts"></i>
+            </div>
+            <div>
+                <div class="text-2xl font-bold text-marine">{{ summary.avg_cer }}%</div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0.5">CER Moyen</div>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center text-xl font-bold">
+                <i class="bi bi-graph-up"></i>
+            </div>
+            <div>
+                <div class="text-2xl font-bold text-marine">{{ summary.avg_wer }}%</div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0.5">WER Moyen</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Comparaison détaillée par carte -->
+    <div class="space-y-6">
+        <h2 class="text-xl font-bold text-marine mb-4">Comparaison détaillée ASR / Corrigé</h2>
+        
+        {% for r in rows %}
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden" id="card-{{ r.pk }}">
+            <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                <div class="flex items-center gap-3">
+                    <i class="bi bi-file-earmark-music text-azur text-xl"></i>
+                    <span class="font-bold text-marine">{{ r.filename }}</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    {% if r.has_correction %}
+                    <span class="px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-xs font-semibold">CER : {{ r.cer }}%</span>
+                    <span class="px-3 py-1 bg-sky-50 text-sky-700 border border-sky-200 rounded-lg text-xs font-semibold">WER : {{ r.wer }}%</span>
+                    <a href="{% url 'transcriptions:correction' r.pk %}" class="px-3 py-1 bg-azur text-white rounded-lg text-xs font-semibold hover:bg-marine transition-colors">Modifier</a>
+                    {% else %}
+                    <span class="px-3 py-1 bg-slate-100 text-slate-500 rounded-lg text-xs font-semibold">Non corrigée</span>
+                    <a href="{% url 'transcriptions:correction' r.pk %}" class="px-3 py-1 bg-marine text-white rounded-lg text-xs font-semibold hover:bg-azur transition-colors">Corriger</a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- ASR Section -->
+                <div>
+                    <h3 class="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center justify-between">
+                        <span>Transcription ASR</span>
+                        <span>{{ r.words }} mots</span>
+                    </h3>
+                    <div class="p-4 bg-slate-50 rounded-xl border border-slate-100 min-h-[160px] text-slate-600 leading-relaxed font-sans text-sm">
+                        {{ r.asr_text|default:"Aucun texte" }}
+                    </div>
+                </div>
+                <!-- Corrected Section -->
+                <div>
+                    <h3 class="text-xs font-bold uppercase tracking-widest text-emerald-600 mb-3 flex items-center justify-between">
+                        <span>Texte Corrigé</span>
+                        {% if r.diff_errors %}<span>{{ r.diff_errors }} modifications</span>{% endif %}
+                    </h3>
+                    <div class="p-4 bg-emerald-50/50 rounded-xl border border-emerald-100 min-h-[160px] text-marine leading-relaxed font-sans text-sm whitespace-pre-wrap">
+                        {{ r.corrected_text|default:"Aucune correction disponible pour ce fichier." }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
