@@ -8,10 +8,6 @@ from django.db import models
 from django.utils import timezone
 
 
-def audio_upload_path(instance, filename):
-    return f"uploads/{instance.id}/{filename}"
-
-
 class TranscriptionJob(models.Model):
     """Un travail de transcription : un fichier audio + son résultat Qwen3-ASR."""
 

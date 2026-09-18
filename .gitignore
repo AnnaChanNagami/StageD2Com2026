@@ -22,3 +22,9 @@ wheels/
 .vscode/
 venv/
 env/
+# Virtual env (dot prefix)
+.venv/
+
+# Uploaded media files (large WAVs, DB)
+webapp/media/uploads/
+webapp/db.sqlite3
