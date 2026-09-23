@@ -22,3 +22,9 @@ wheels/
 .vscode/
 venv/
 env/
+# Environnement & artefacts locaux
+.venv/
+webapp/media/uploads/
+webapp/db.sqlite3
+*.wav
+*.mp3

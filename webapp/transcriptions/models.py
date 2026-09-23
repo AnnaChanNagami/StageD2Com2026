@@ -8,6 +8,10 @@ from django.db import models
 from django.utils import timezone
 
 
+def audio_upload_path(instance, filename):
+    return f"uploads/{instance.id}/{filename}"
+
+
 class TranscriptionJob(models.Model):
     """Un travail de transcription : un fichier audio + son résultat Qwen3-ASR."""
 
@@ -20,8 +24,12 @@ class TranscriptionJob(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     # Fichier d'entrée conservé sous MEDIA_ROOT/uploads/<uuid>/<nom>
-    audio_file = models.FileField(upload_to="uploads/%Y/%m/%d/")
+    audio_file = models.FileField(upload_to=audio_upload_path)
     original_name = models.CharField(max_length=512, blank=True, default="")
+    content_type = models.CharField(
+        blank=True, default="", max_length=128, help_text="Type MIME du fichier"
+    )
+    file_size = models.BigIntegerField(blank=True, null=True, help_text="Taille du fichier en octets")
     duration_sec = models.FloatField(null=True, blank=True)
 
     # Options d'inférence Qwen3-ASR

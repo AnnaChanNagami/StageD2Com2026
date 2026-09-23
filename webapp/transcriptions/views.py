@@ -6,6 +6,7 @@ import os
 from difflib import SequenceMatcher
 from pathlib import Path
 
+from django.conf import settings
 from django.http import (
     HttpResponse,
     HttpResponseBadRequest,
@@ -26,12 +27,33 @@ ALLOWED_EXT = {
     ".aac", ".wma", ".mov", ".mkv", ".webm", ".amr",
 }
 
+MAX_UPLOAD_BYTES = getattr(settings, "MAX_UPLOAD_SIZE_MB", 2000) * 1024 * 1024
+
 TXT_HEADER = (
     "# Transcription Qwen3-ASR\n"
     "# Généré par l'application web — fichier : {name}\n"
     "# Date : {date}\n"
     "# Langue : {lang}\n\n"
 )
+
+
+# --------------------------------------------------------------------------
+# Page unique (bouton central)
+# --------------------------------------------------------------------------
+
+def home(request):
+    """Page unique : un gros bouton, un dépôt/une capture, et le texte en dessous."""
+    languages = sorted(qwen_service.supported_languages())
+    context = {
+        "active": "home",
+        "languages": languages,
+        "backend_available": qwen_service.backend_available(),
+        "runtime": qwen_service.runtime_info(),
+        "allowed_ext_json": json.dumps(sorted(ALLOWED_EXT)),
+        "allowed_accept": ",".join(sorted(ALLOWED_EXT)),
+        "max_upload_bytes": MAX_UPLOAD_BYTES,
+    }
+    return render(request, "transcriptions/home.html", context)
 
 
 # --------------------------------------------------------------------------
@@ -358,18 +380,20 @@ def api_job_create(request):
         language = ""
 
     job = TranscriptionJob(
-        audio_file=audio,
-        original_name=audio.name[:500],
-        prompt=(request.POST.get("prompt", "") or "").strip(),
-        language=language,
-        max_new_tokens=int(
-            request.POST.get("max_new_tokens", "")
-            or request.POST.get("max_tokens", "")
-            or 512
-        ),
-        want_timestamps=request.POST.get("timestamps", "") in ("1", "true", "on"),
-        duration_sec=None,
-    )
+            audio_file=audio,
+            original_name=audio.name[:500],
+            prompt=(request.POST.get("prompt", "") or "").strip(),
+            language=language,
+            max_new_tokens=int(
+                request.POST.get("max_new_tokens", "")
+                or request.POST.get("max_tokens", "")
+                or 512
+            ),
+            want_timestamps=request.POST.get("timestamps", "") in ("1", "true", "on"),
+            duration_sec=None,
+            content_type=(audio.content_type or "")[:128],
+            file_size=audio.size,
+        )
     job.save()
     url = reverse("transcriptions:job_detail", args=[job.id])
     return JsonResponse({"id": str(job.id), "status": job.status, "url": url}, status=201)

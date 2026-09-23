@@ -5,14 +5,14 @@
 L'application est fractionnée en DEUX processus à lancer dans
 deux terminaux séparés, depuis le dossier webapp/.
 
-  cd "C:/Users/elodi/Desktop/Stage/Outil Speech to text/Qwen3-ASR/webapp"
+  cd "C:/Users/elodi/Desktop/Stage/Outil Speech to text/Qwen3-ASR bouton/webapp"
 
 -----------------------------------------------------------------
 TERMINAL 1 — Serveur web (interface)
 -----------------------------------------------------------------
-  ../.venv/Scripts/python.exe manage.py runserver 0.0.0.0:8002 --noreload
+  ../.venv/Scripts/python.exe manage.py runserver 0.0.0.0:8003 --noreload
 
-  Accès : http://127.0.0.1:8002
+  Accès : http://127.0.0.1:8003
 
 -----------------------------------------------------------------
 TERMINAL 2 — Worker de transcription (tourne le modèle)
@@ -25,10 +25,21 @@ TERMINAL 2 — Worker de transcription (tourne le modèle)
 -----------------------------------------------------------------
 PAGES
 -----------------------------------------------------------------
-  http://127.0.0.1:8002/            Dashboard (stats + graphiques)
-  http://127.0.0.1:8002/upload/     Nouvelle transcription
-  http://127.0.0.1:8002/jobs/       Historique des transcriptions
-  /jobs/<id>/                       Détail + exports TXT/JSON/SRT
+  http://127.0.0.1:8003/            PAGE UNIQUE : un seul gros bouton
+                                    - déposez un fichier audio (wav/mp3/
+                                      m4a/ogg/webm… ou drag & drop), OU
+                                      cliquez le bouton pour enregistrer
+                                      au micro ;
+                                    - relancez le bouton pour lancer la
+                                      transcription ;
+                                    - le texte s'affiche directement sous
+                                      le bouton, avec exports TXT/SRT/JSON
+                                      et bouton « Nouvelle transcription ».
+
+  Routes conservées (non affichées dans l'interface) :
+  /dashboard/    ancien tableau de bord
+  /jobs/         historique des transcriptions
+  /jobs/<id>/    détail + exports TXT/JSON/SRT
 
 -----------------------------------------------------------------
 API REST
@@ -54,6 +65,6 @@ FICHIERS CLÉS (webapp/)
   transcriptions/views.py              vues (HTML + API JSON)
   transcriptions/urls.py               routage
   transcriptions/management/commands/run_worker.py   worker
-  templates/transcriptions/            base/dashboard/job_* /upload
-  static/css/app.css                   feuille de style (Bootstrap sombre)
+  templates/transcriptions/home.html   PAGE UNIQUE (gros bouton + résultat)
+  static/css/scribe.css                styles de la page unique
 =================================================================
