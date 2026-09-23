@@ -1,0 +1,705 @@
+{% load static %}<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transcription — Qwen3-ASR</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          marine: '#1f3864',
+          azur: '#2e5496',
+          'azur-200': '#b9d2ff',
+          'azur-300': '#8ab4ff',
+          'azur-400': '#5b8cf0',
+          'azur-500': '#3a6fd8',
+          abyss: '#0a1424',
+          ink: '#0d1b33'
+        }
+      }
+    }
+  }
+</script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="{% static 'css/scribe.css' %}">
+</head>
+<body class="page-magic min-h-screen flex flex-col text-slate-100 selection:bg-azur-400/40">
+
+<!-- ===================== EN-TÊTE ===================== -->
+<header class="relative z-20 flex items-center justify-between px-5 sm:px-8 py-5">
+  <div class="flex items-center gap-3">
+    <div class="h-11 w-11 rounded-2xl bg-gradient-to-br from-azur-400 to-azur-500 grid place-items-center shadow-lg shadow-azur-500/30">
+      <i class="bi bi-mic-fill text-white text-lg"></i>
+    </div>
+    <div class="leading-tight">
+      <div class="font-semibold tracking-tight text-[15px]">Qwen3-ASR</div>
+      <div class="text-xs text-slate-400">Transcription vocale</div>
+    </div>
+  </div>
+  <div class="flex items-center gap-3">
+    {% if backend_available %}
+      <span class="chip"><span class="dot"></span> Moteur prêt</span>
+    {% else %}
+      <span class="chip warn"><span class="dot"></span> Moteur indisponible</span>
+    {% endif %}
+    <button id="gearBtn" class="h-10 w-10 rounded-xl grid place-items-center border border-white/12 bg-white/5 text-azur-300 hover:bg-white/10 transition" aria-label="Ouvrir les options" type="button">
+      <i class="bi bi-sliders2"></i>
+    </button>
+  </div>
+</header>
+
+{% if not backend_available %}
+<div class="relative z-20 mx-5 sm:mx-8 mb-1 rounded-xl border border-amber-400/35 bg-amber-400/10 px-4 py-3 text-sm text-amber-200">
+  <i class="bi bi-exclamation-triangle-fill mr-2"></i>Le moteur Qwen n'est pas disponible sur ce serveur (dépendance manquante). Les transcriptions échoueront tant que le moteur n'est pas rétabli.
+</div>
+{% endif %}
+
+<!-- ===================== CORPS ===================== -->
+<main class="relative z-10 flex-1 flex flex-col items-center justify-center px-4 pt-6 pb-12">
+
+  <!-- Lueur derrière le bouton -->
+  <div class="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-[560px] w-[560px] max-w-[95vw] rounded-full bg-azur-500/15 blur-[110px]"></div>
+
+  <h1 class="relative text-center font-bold tracking-tight text-3xl sm:text-4xl">
+    Parlez, je transcris.
+    <span class="block text-sm font-normal text-slate-400 mt-3 max-w-xl mx-auto leading-relaxed">
+      Un seul bouton&nbsp;: enregistrez-vous ou déposez un fichier audio — le texte s'affiche juste en dessous.
+    </span>
+  </h1>
+
+  <!-- ---------- LE GROS BOUTON ---------- -->
+  <div class="magic-wrap relative mt-10" data-state="idle" id="bigWrap">
+    <span class="magic-halo"></span>
+    <span class="magic-halo halo-2"></span>
+    <button id="bigBtn" data-state="idle" type="button" class="magic-btn" aria-label="Démarrer un enregistrement" aria-haspopup="menu" aria-expanded="false">
+      <svg id="ringWrap" class="progress-ring hidden" viewBox="0 0 100 100" aria-hidden="true">
+        <circle class="track" cx="50" cy="50" r="46"></circle>
+        <circle class="bar" id="ringBar" cx="50" cy="50" r="46"></circle>
+      </svg>
+      <span class="m-icon" id="mIcon"><i class="bi bi-mic-fill"></i></span>
+      <span id="mPct" class="text-sm font-semibold tabular-nums opacity-90 hidden"></span>
+    </button>
+
+    <!-- ---------- MENU APPUI LONG ---------- -->
+    <div id="longMenu" class="long-menu" role="menu" aria-label="Navigation rapide">
+      <div class="long-menu-title">Navigation</div>
+      <a href="{% url 'transcriptions:dashboard' %}" role="menuitem" class="long-menu-item" data-target="dashboard">
+        <i class="bi bi-grid-1x2-fill"></i><span>Dashboard</span>
+      </a>
+      <a href="{% url 'transcriptions:home' %}" role="menuitem" class="long-menu-item" data-target="home">
+        <i class="bi bi-mic-fill"></i><span>Transcription</span>
+      </a>
+      <a href="{% url 'transcriptions:job_list' %}" role="menuitem" class="long-menu-item" data-target="jobs">
+        <i class="bi bi-clock-history"></i><span>Historique</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- ---------- STATUT ---------- -->
+  <p id="statusLine" aria-live="polite" class="relative mt-7 text-xl font-semibold text-center text-slate-800">Un clic pour parler</p>
+  <p id="statusSub" class="relative mt-1.5 text-sm text-slate-500 text-center max-w-md leading-relaxed">Cliquez pour enregistrer votre voix — ou déposez un fichier audio n'importe où sur la page.</p>
+
+  <p id="hintRow" class="relative mt-3 text-sm text-slate-500">
+    Glissez un fichier audio ici ·
+    <button id="pickFile" type="button" class="text-azur-500 font-medium underline underline-offset-4 hover:text-azur-600 transition">parcourez vos fichiers</button>
+  </p>
+
+  <!-- ---------- PANNEAU ENREGISTREMENT ---------- -->
+  <div id="recPanel" class="hidden relative mt-6 items-center gap-4 rounded-2xl border border-azur-200 bg-white/80 px-5 py-3 backdrop-blur shadow-sm text-slate-800">
+    <span class="rec-dot h-2.5 w-2.5 rounded-full bg-rose-500 flex-none"></span>
+    <span id="timer" class="tabular-nums font-semibold text-sm">00:00</span>
+    <div id="wave" class="flex h-8 items-center gap-1"></div>
+  </div>
+
+  <!-- ---------- FICHIER CHARGÉ ---------- -->
+  <div id="fileChip" class="hidden relative mt-6 items-center gap-3 rounded-2xl border border-azur-200 bg-white/80 px-4 py-2.5 backdrop-blur shadow-sm max-w-full text-slate-800">
+    <i class="bi bi-file-earmark-music text-azur-500 flex-none"></i>
+    <span id="fileName" class="text-sm font-medium truncate max-w-[220px] sm:max-w-[340px]">—</span>
+    <span id="fileSize" class="text-xs text-slate-500 flex-none"></span>
+    <button id="clearFile" type="button" class="flex-none rounded-full p-1.5 hover:bg-slate-100 transition" aria-label="Retirer le fichier">
+      <i class="bi bi-x-lg text-slate-400"></i>
+    </button>
+  </div>
+
+  <!-- ---------- OPTIONS AVANCÉES ---------- -->
+  <details class="opts glass mt-7 w-full max-w-md px-5 py-4 text-sm relative" id="opts">
+    <summary class="flex items-center justify-between text-slate-300 select-none">
+      <span><i class="bi bi-sliders2 mr-2 text-azur-300"></i>Options avancées</span>
+      <i class="bi bi-chevron-down opts-caret text-azur-300"></i>
+    </summary>
+    <div class="mt-4 grid gap-4">
+      <label class="block">
+        <span class="text-slate-400 text-xs uppercase tracking-wide">Langue</span>
+        <select id="optLang" class="magic-select w-full mt-1.5">
+          <option value="">Détection automatique</option>
+          {% for lang in languages %}
+          <option value="{{ lang }}">{{ lang }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="flex items-center gap-2.5 text-slate-300">
+        <input type="checkbox" id="optTs" class="magic-check" checked>
+        Timestamps &amp; segments (nécessaire pour l'export SRT)
+      </label>
+      <label class="block">
+        <span class="text-slate-400 text-xs uppercase tracking-wide">Contexte / mots-clés</span>
+        <input id="optPrompt" type="text" class="magic-input mt-1.5" placeholder="Ex : prénom, nom, termes techniques…">
+      </label>
+      <label class="block">
+        <span class="text-slate-400 text-xs uppercase tracking-wide">Nombre max de tokens</span>
+        <input id="optTokens" type="number" min="64" max="4096" step="64" class="magic-input mt-1.5" placeholder="512">
+      </label>
+    </div>
+  </details>
+
+  <!-- ---------- RÉSULTAT ---------- -->
+  <section id="resultCard" class="hidden w-full max-w-3xl mt-10 glass p-5 sm:p-6 relative">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <span class="h-10 w-10 rounded-xl bg-emerald-500/15 border border-emerald-400/30 grid place-items-center flex-none">
+          <i class="bi bi-check2-circle text-emerald-300 text-lg"></i>
+        </span>
+        <div class="min-w-0">
+          <div id="resName" class="font-semibold truncate text-[15px]">—</div>
+          <div class="text-xs text-slate-400">Transcription terminée</div>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-2" id="resChips"></div>
+    </div>
+
+    <div id="transcript" class="mt-4 max-h-80 overflow-y-auto rounded-xl border border-white/10 bg-black/25 p-4 text-[15px] leading-relaxed text-slate-200"></div>
+
+    <div class="mt-4 flex flex-wrap items-center gap-2">
+      <button id="copyBtn" type="button" class="btn-ghost btn-primary-glow"><i class="bi bi-clipboard"></i> Copier le texte</button>
+      <a id="dlTxt" class="btn-ghost" href="#"><i class="bi bi-filetype-txt"></i> TXT</a>
+      <a id="dlSrt" class="btn-ghost" href="#"><i class="bi bi-file-earmark-richtext"></i> SRT</a>
+      <a id="dlJson" class="btn-ghost" href="#"><i class="bi bi-filetype-json"></i> JSON</a>
+      <span class="flex-1"></span>
+      <button id="againBtn" type="button" class="btn-ghost"><i class="bi bi-arrow-counterclockwise"></i> Nouvelle transcription</button>
+    </div>
+  </section>
+
+  <input type="file" id="fileInput" class="hidden" accept="{{ allowed_accept }}">
+</main>
+
+<footer class="relative z-10 text-center text-xs text-slate-500 pb-6">
+  Qwen3-ASR · modèle {{ runtime.model|default:"Qwen3-ASR-0.6B" }} · traitement local
+</footer>
+
+<!-- ===================== SUPERPOSITIONS ===================== -->
+<div id="dropOverlay" class="drop-overlay">
+  <div class="text-center">
+    <i class="bi bi-cloud-arrow-up-fill text-5xl text-azur-300"></i>
+    <div class="mt-3 text-lg font-semibold">Déposez votre fichier audio</div>
+    <div class="mt-1 text-sm text-slate-400">wav, mp3, m4a, ogg, flac, webm…</div>
+  </div>
+</div>
+
+<div id="toast" class="glass px-5 py-3 text-sm font-medium" role="status"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var PLACE = '00000000-0000-0000-0000-000000000000';
+  var ENDPOINTS = {
+    create: "{% url 'transcriptions:api_job_create' %}",
+    status: "{% url 'transcriptions:api_job_status' '00000000-0000-0000-0000-000000000000' %}",
+    txt: "{% url 'transcriptions:download_txt' '00000000-0000-0000-0000-000000000000' %}",
+    srt: "{% url 'transcriptions:download_srt' '00000000-0000-0000-0000-000000000000' %}",
+    json: "{% url 'transcriptions:download_json' '00000000-0000-0000-0000-000000000000' %}"
+  };
+  var ALLOWED = {{ allowed_ext_json|safe }};
+  var MAX_BYTES = {{ max_upload_bytes }};
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  var wrap = $('bigWrap'), btn = $('bigBtn'), mIcon = $('mIcon'), mPct = $('mPct');
+  var ringWrap = $('ringWrap'), ringBar = $('ringBar');
+  var RING_C = 2 * Math.PI * 46;
+  var statusLine = $('statusLine'), statusSub = $('statusSub'), hintRow = $('hintRow');
+  var fileChip = $('fileChip'), fileNameEl = $('fileName'), fileSizeEl = $('fileSize');
+  var recPanel = $('recPanel'), timerEl = $('timer'), waveEl = $('wave');
+  var resultCard = $('resultCard'), transcriptEl = $('transcript');
+  var dropOverlay = $('dropOverlay'), opts = $('opts'), fileInput = $('fileInput');
+
+  var ICONS = {
+    idle: 'bi-mic-fill',
+    recording: 'bi-stop-fill',
+    ready: 'bi-play-fill',
+    processing: 'bi-arrow-repeat spin-icon',
+    done: 'bi-check-lg',
+    error: 'bi-exclamation-lg'
+  };
+
+  var STATES = {
+    idle: { line: 'Un clic pour parler', sub: "Cliquez pour enregistrer votre voix — ou déposez un fichier audio n'importe où sur la page.", aria: 'Démarrer un enregistrement' },
+    recording: { line: 'Enregistrement en cours…', sub: 'Cliquez à nouveau sur le bouton pour arrêter.', aria: "Arrêter l'enregistrement" },
+    ready: { line: 'Prêt à transcrire', sub: 'Cliquez sur le bouton pour lancer la transcription.', aria: 'Lancer la transcription' },
+    processing: { line: 'Transcription en cours…', sub: 'Merci de patienter, le modèle travaille.', aria: 'Transcription en cours' },
+    done: { line: 'Transcription terminée', sub: 'Le texte est affiché ci-dessous. Cliquez pour recommencer.', aria: 'Nouvelle transcription' },
+    error: { line: 'Une erreur est survenue', sub: '', aria: 'Réessayer' }
+  };
+
+  var state = 'idle';
+  var file = null;
+  var jobId = null;
+  var pollTimer = null;
+  var pollFails = 0;
+  var lastTranscript = '';
+
+  /* ---------- menu appui long ---------- */
+  var longMenu = $('longMenu');
+  var LONG_PRESS_MS = 600;
+  var longTimer = null;
+  var longFired = false;
+
+  /* ---------- utilitaires ---------- */
+
+  function esc(s) {
+    return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function fmtSize(bytes) {
+    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1).replace('.', ',') + ' Mo';
+    if (bytes >= 1024) return Math.round(bytes / 1024) + ' Ko';
+    return bytes + ' o';
+  }
+
+  function stamp() {
+    var d = new Date(), p = function (n) { return String(n).padStart(2, '0'); };
+    return '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  }
+
+  var toastTimer = null;
+  function toast(msg) {
+    var el = $('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove('show'); }, 3400);
+  }
+
+  /* ---------- machine à états ---------- */
+
+  function setState(next, over) {
+    state = next;
+    var cfg = Object.assign({}, STATES[next], over || {});
+    wrap.dataset.state = next;
+    btn.dataset.state = next;
+    mIcon.innerHTML = '<i class="bi ' + ICONS[next] + '"></i>';
+    statusLine.textContent = cfg.line;
+    statusSub.textContent = cfg.sub || '';
+    btn.setAttribute('aria-label', cfg.aria || next);
+
+    recPanel.classList.toggle('hidden', next !== 'recording');
+    recPanel.classList.toggle('flex', next === 'recording');
+    hintRow.classList.toggle('hidden', next !== 'idle');
+    fileChip.classList.toggle('hidden', !file || next === 'idle');
+    fileChip.classList.toggle('flex', !!file && next !== 'idle');
+    ringWrap.classList.toggle('hidden', next !== 'processing');
+    mPct.classList.add('hidden');
+    btn.classList.remove('indeterminate');
+  }
+
+  function setRing(p) {
+    if (p === null || p === undefined) {
+      btn.classList.add('indeterminate');
+      ringBar.style.strokeDasharray = (RING_C * 0.25).toFixed(1) + ' ' + (RING_C * 0.75).toFixed(1);
+      ringBar.style.strokeDashoffset = '0';
+      mPct.classList.add('hidden');
+    } else {
+      var v = Math.max(0.02, Math.min(1, p));
+      btn.classList.remove('indeterminate');
+      ringBar.style.strokeDasharray = RING_C.toFixed(1);
+      ringBar.style.strokeDashoffset = (RING_C * (1 - v)).toFixed(1);
+      mPct.textContent = Math.round(v * 100) + ' %';
+      mPct.classList.toggle('hidden', p <= 0);
+    }
+  }
+
+  /* ---------- menu appui long ---------- */
+
+  function activeTarget() {
+    if (state === 'ready' || state === 'processing' || state === 'done') return 'home';
+    if (state === 'idle' || state === 'recording') return 'dashboard';
+    return 'jobs';
+  }
+
+  function positionLongMenu() {
+    var r = wrap.getBoundingClientRect();
+    longMenu.style.left = Math.round(r.left + r.width / 2) + 'px';
+    longMenu.style.top = Math.round(r.bottom + 12) + 'px';
+    longMenu.style.transform = 'translateX(-50%)';   // centre le menu sur le bouton, pas son bord gauche
+  }
+
+  function openLongMenu() {
+    longFired = true;
+    positionLongMenu();
+    longMenu.classList.add('open');
+    longMenu.setAttribute('aria-hidden', 'false');
+    btn.setAttribute('aria-expanded', 'true');
+    var target = activeTarget();
+    var items = longMenu.querySelectorAll('.long-menu-item');
+    for (var i = 0; i < items.length; i++) {
+      items[i].classList.toggle('active', items[i].getAttribute('data-target') === target);
+    }
+  }
+
+  function closeLongMenu() {
+    if (longTimer) { clearTimeout(longTimer); longTimer = null; }
+    longFired = false;
+    longMenu.classList.remove('open');
+    longMenu.setAttribute('aria-hidden', 'true');
+    btn.setAttribute('aria-expanded', 'false');
+  }
+
+  /* ---------- fichier ---------- */
+
+  function showFileChip() {
+    fileNameEl.textContent = file.name;
+    fileSizeEl.textContent = fmtSize(file.size);
+  }
+
+  function handleFile(f) {
+    if (state === 'recording' || state === 'processing') {
+      toast(state === 'recording' ? "Enregistrement en cours — arrêtez-le d'abord." : 'Une transcription est déjà en cours.');
+      return;
+    }
+    var m = f.name.match(/\.[^.]+$/);
+    var ext = m ? m[0].toLowerCase() : '';
+    if (ALLOWED.indexOf(ext) === -1) {
+      toast('Format « ' + (ext || 'inconnu') + ' » non pris en charge.');
+      return;
+    }
+    if (f.size > MAX_BYTES) {
+      toast('Fichier trop volumineux (max ' + Math.round(MAX_BYTES / 1048576) + ' Mo).');
+      return;
+    }
+    file = f;
+    hideResult();
+    showFileChip();
+    setState('ready');
+  }
+
+  function clearFile() {
+    if (state === 'processing') return;
+    file = null;
+    jobId = null;
+    hideResult();
+    setState('idle');
+  }
+
+  /* ---------- enregistrement micro ---------- */
+
+  var stream = null, mediaRec = null, chunks = [], recTimer = null, recStart = 0;
+  var rafId = null, waveIv = null, actx = null;
+
+  function startWave() {
+    waveEl.innerHTML = '';
+    for (var i = 0; i < 32; i++) {
+      var b = document.createElement('span');
+      b.className = 'wave-bar';
+      b.style.height = '4px';
+      waveEl.appendChild(b);
+    }
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      actx = new AC();
+      var src = actx.createMediaStreamSource(stream);
+      var analyser = actx.createAnalyser();
+      analyser.fftSize = 128;
+      src.connect(analyser);
+      var data = new Uint8Array(analyser.frequencyBinCount);
+      var bars = waveEl.children;
+      var tick = function () {
+        analyser.getByteFrequencyData(data);
+        for (var j = 0; j < bars.length; j++) {
+          var v = data[Math.floor(j * data.length / bars.length)] / 255;
+          bars[j].style.height = Math.max(4, Math.round(4 + v * 30)) + 'px';
+        }
+        rafId = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch (e) {
+      waveIv = setInterval(function () {
+        for (var k = 0; k < waveEl.children.length; k++) {
+          waveEl.children[k].style.height = (4 + Math.random() * 12) + 'px';
+        }
+      }, 130);
+    }
+  }
+
+  function stopWave() {
+    if (rafId) cancelAnimationFrame(rafId);
+    if (waveIv) clearInterval(waveIv);
+    rafId = null; waveIv = null;
+    try { if (actx) actx.close(); } catch (e) {}
+    actx = null;
+  }
+
+  function startRecording() {
+    if (!navigator.mediaDevices || !window.MediaRecorder) {
+      toast('Enregistrement non supporté par ce navigateur — déposez un fichier audio à la place.');
+      return;
+    }
+    hideResult();
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (s) {
+      stream = s;
+      chunks = [];
+      var mime = '';
+      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mime = 'audio/webm;codecs=opus';
+      else if (MediaRecorder.isTypeSupported('audio/webm')) mime = 'audio/webm';
+      else if (MediaRecorder.isTypeSupported('audio/mp4')) mime = 'audio/mp4';
+      mediaRec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      mediaRec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+      mediaRec.onstop = onRecStop;
+      mediaRec.start(250);
+      recStart = Date.now();
+      timerEl.textContent = '00:00';
+      setState('recording');
+      recTimer = setInterval(function () {
+        var s2 = Math.floor((Date.now() - recStart) / 1000);
+        timerEl.textContent = String(Math.floor(s2 / 60)).padStart(2, '0') + ':' + String(s2 % 60).padStart(2, '0');
+      }, 250);
+      startWave();
+    }).catch(function () {
+      toast('Micro indisponible ou refusé — déposez un fichier audio à la place.');
+    });
+  }
+
+  function stopRecording() {
+    clearInterval(recTimer); recTimer = null;
+    try { if (mediaRec && mediaRec.state !== 'inactive') mediaRec.stop(); } catch (e) {}
+  }
+
+  function onRecStop() {
+    var type = (mediaRec && mediaRec.mimeType) || 'audio/webm';
+    var blob = new Blob(chunks, { type: type.split(';')[0] });
+    stopWave();
+    if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+    mediaRec = null; chunks = [];
+    if (!blob.size) { toast('Enregistrement vide.'); setState('idle'); return; }
+    var ext = type.indexOf('mp4') >= 0 ? '.m4a' : '.webm';
+    file = new File([blob], 'enregistrement_' + stamp() + ext, { type: blob.type || 'audio/webm' });
+    hideResult();
+    showFileChip();
+    setState('ready');
+  }
+
+  /* ---------- transcription ---------- */
+
+  function hideResult() { resultCard.classList.add('hidden'); }
+
+  function fail(msg) {
+    clearTimeout(pollTimer); pollTimer = null;
+    setState('error', { sub: String(msg || 'Erreur inconnue.').slice(0, 260) });
+    toast('Transcription impossible : ' + String(msg || '').slice(0, 140));
+  }
+
+  function startJob() {
+    if (!file) { toast('Aucun fichier à transcrire.'); setState('idle'); return; }
+    hideResult();
+    jobId = null;
+    pollFails = 0;
+    setState('processing', { line: 'Envoi du fichier…' });
+    setRing(null);
+
+    var fd = new FormData();
+    fd.append('audio_file', file, file.name);
+    fd.append('language', $('optLang').value);
+    if ($('optTs').checked) fd.append('timestamps', '1');
+    var prompt = $('optPrompt').value.trim();
+    if (prompt) fd.append('prompt', prompt);
+    var tok = $('optTokens').value;
+    if (tok) fd.append('max_new_tokens', tok);
+
+    fetch(ENDPOINTS.create, { method: 'POST', body: fd }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+        return data;
+      });
+    }).then(function (data) {
+      jobId = data.id;
+      pollJob();
+    }).catch(function (e) {
+      fail(e.message);
+    });
+  }
+
+  function pollJob() {
+    if (!jobId) return;
+    fetch(ENDPOINTS.status.replace(PLACE, jobId)).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function (d) {
+      if (state !== 'processing') return;
+      pollFails = 0;
+      if (d.status === 'completed') { showResult(d); return; }
+      if (d.status === 'failed') { fail(d.error || 'Échec de la transcription.'); return; }
+      var stage = d.stage || (d.status === 'pending' ? 'En attente du worker…' : 'Transcription en cours…');
+      var p = (typeof d.progress === 'number' && d.progress > 0) ? d.progress / 100 : null;
+      setState('processing', { line: stage });
+      statusSub.textContent = p !== null
+        ? Math.round(p * 100) + ' % effectué — ne fermez pas la page.'
+        : 'Merci de patienter, le modèle travaille.';
+      setRing(p);
+      pollTimer = setTimeout(pollJob, 1500);
+    }).catch(function () {
+      pollFails += 1;
+      if (pollFails > 40) { fail('Serveur injoignable.'); return; }
+      pollTimer = setTimeout(pollJob, 3000);
+    });
+  }
+
+  function showResult(d) {
+    clearTimeout(pollTimer); pollTimer = null;
+    jobId = d.id;
+    lastTranscript = d.transcript_text || '';
+    $('resName').textContent = d.original_name || 'Fichier audio';
+    transcriptEl.textContent = lastTranscript.trim() ? lastTranscript : '— Aucun texte n\'a été retranscrit. —';
+
+    var words = lastTranscript.trim() ? lastTranscript.trim().split(/\s+/).length : 0;
+    var lang = (d.language_detected || '').trim() || 'auto';
+    var elapsed = (d.elapsed_sec !== null && d.elapsed_sec !== undefined) ? Number(d.elapsed_sec) : null;
+    var chips =
+      '<span class="chip"><i class="bi bi-translate"></i> ' + esc(lang) + '</span>' +
+      '<span class="chip"><i class="bi bi-clock-history"></i> ' + (elapsed !== null ? elapsed.toFixed(1).replace('.', ',') + ' s' : '—') + '</span>' +
+      '<span class="chip"><i class="bi bi-text-paragraph"></i> ' + words + ' mots</span>';
+    if (d.segment_count) {
+      chips += '<span class="chip"><i class="bi bi-collection-play"></i> ' + d.segment_count + ' segments</span>';
+    }
+    $('resChips').innerHTML = chips;
+
+    $('dlTxt').href = ENDPOINTS.txt.replace(PLACE, jobId);
+    $('dlSrt').href = ENDPOINTS.srt.replace(PLACE, jobId);
+    $('dlJson').href = ENDPOINTS.json.replace(PLACE, jobId);
+
+    resultCard.classList.remove('hidden');
+    setState('done');
+    setTimeout(function () { resultCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 150);
+  }
+
+  function resetAll() {
+    clearTimeout(pollTimer); pollTimer = null;
+    file = null; jobId = null;
+    hideResult();
+    setState('idle');
+  }
+
+  /* ---------- interactions ---------- */
+
+  // Appui long : pointerdown démarre le timer, pointerup/leave/cancel l'annule.
+  btn.addEventListener('pointerdown', function (e) {
+    if (e.button !== undefined && e.button !== 0) return; // clic gauche uniquement
+    closeLongMenu();
+    longFired = false;
+    longTimer = setTimeout(function () {
+      longTimer = null;
+      if (state === 'recording') { stopRecording(); }
+      openLongMenu();
+    }, LONG_PRESS_MS);
+  });
+
+  var cancelLong = function () {
+    if (longTimer) { clearTimeout(longTimer); longTimer = null; }
+  };
+  btn.addEventListener('pointerup', cancelLong);
+  btn.addEventListener('pointerleave', cancelLong);
+  btn.addEventListener('pointercancel', cancelLong);
+
+  btn.addEventListener('click', function () {
+    if (longFired) { longFired = false; return; }   // le clic généré après un appui long est consommé : on garde le menu ouvert, sans exécuter l'action
+    if (state === 'idle') startRecording();
+    else if (state === 'recording') stopRecording();
+    else if (state === 'ready') startJob();
+    else if (state === 'done') resetAll();
+    else if (state === 'error') { if (file) setState('ready'); else resetAll(); }
+  });
+
+  // Fermeture du menu : clic ailleurs ou touche Échap.
+  document.addEventListener('pointerdown', function (e) {
+    if (!longMenu.classList.contains('open')) return;
+    if (longMenu.contains(e.target) || btn.contains(e.target)) return;
+    closeLongMenu();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && longMenu.classList.contains('open')) closeLongMenu();
+  });
+
+  // Navigation : les entrées du menu sont de vrais liens, mais on ferme le menu proprement.
+  longMenu.addEventListener('click', function (e) {
+    if (e.target.closest('.long-menu-item')) closeLongMenu();
+  });
+
+  $('clearFile').addEventListener('click', clearFile);
+  $('againBtn').addEventListener('click', resetAll);
+
+  $('pickFile').addEventListener('click', function () { fileInput.click(); });
+  $('gearBtn').addEventListener('click', function () {
+    opts.open = !opts.open;
+    if (opts.open) opts.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+
+  fileInput.addEventListener('change', function () {
+    if (fileInput.files && fileInput.files[0]) handleFile(fileInput.files[0]);
+    fileInput.value = '';
+  });
+
+  $('copyBtn').addEventListener('click', function () {
+    var ok = function () { toast('Texte copié dans le presse-papiers.'); };
+    var fallback = function () {
+      try {
+        var range = document.createRange();
+        range.selectNodeContents(transcriptEl);
+        var sel = window.getSelection();
+        sel.removeAllRanges(); sel.addRange(range);
+        var done = document.execCommand('copy');
+        sel.removeAllRanges();
+        toast(done ? 'Texte copié.' : 'Copie impossible — sélectionnez le texte manuellement.');
+      } catch (e) { toast('Copie impossible — sélectionnez le texte manuellement.'); }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(lastTranscript).then(ok).catch(fallback);
+    } else fallback();
+  });
+
+  /* ---------- glisser-déposer global ---------- */
+
+  var dragDepth = 0;
+  window.addEventListener('dragenter', function (e) {
+    if (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') !== -1) {
+      dragDepth += 1;
+      dropOverlay.classList.add('on');
+    }
+  });
+  window.addEventListener('dragover', function (e) { e.preventDefault(); });
+  window.addEventListener('dragleave', function () {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) dropOverlay.classList.remove('on');
+  });
+  window.addEventListener('drop', function (e) {
+    e.preventDefault();
+    dragDepth = 0;
+    dropOverlay.classList.remove('on');
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFile(e.dataTransfer.files[0]);
+    }
+  });
+
+  /* ---------- garde-fous ---------- */
+
+  window.addEventListener('beforeunload', function (e) {
+    if (state === 'processing') { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  setState('idle');
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,47 @@
+{% load static %}<!DOCTYPE html>
+<html lang="fr" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Qwen3-ASR{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        marine: '#1f3864',
+                        azur: '#2e5496',
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/scribe.css' %}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="h-full bg-gray-50 text-marine">
+    
+    <div class="sidebar flex flex-col p-4 shadow-sm">
+        <div class="mb-8 p-2">
+            <h1 class="text-xl font-bold text-marine"><i class="bi bi-mic micro-actif"></i> Qwen3-ASR</h1>
+        </div>
+        <nav class="flex flex-col gap-2">
+            <a class="nav-link p-3 rounded-lg {% if active == 'dashboard' %}active text-white{% else %}hover:bg-gray-100{% endif %}" href="{% url 'transcriptions:dashboard' %}"><i class="bi bi-speedometer2"></i> Dashboard</a>
+            <a class="nav-link p-3 rounded-lg {% if active == 'upload' %}active text-white{% else %}hover:bg-gray-100{% endif %}" href="{% url 'transcriptions:upload' %}"><i class="bi bi-cloud-upload"></i> Transcrire</a>
+            <a class="nav-link p-3 rounded-lg {% if active == 'jobs' %}active text-white{% else %}hover:bg-gray-100{% endif %}" href="{% url 'transcriptions:job_list' %}"><i class="bi bi-list-task"></i> Historique</a>
+            <a class="nav-link p-3 rounded-lg {% if active == 'corrections' %}active text-white{% else %}hover:bg-gray-100{% endif %}" href="{% url 'transcriptions:corrections' %}"><i class="bi bi-exclamation-triangle"></i> Erreurs</a>
+        </nav>
+    </div>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{% static 'js/chart.umd.min.js' %}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/diff@7.0.0/dist/diff.min.js"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,74 @@
+{% extends "transcriptions/base.html" %}
+{% load humanize %}
+
+{% block title %}Correction — Qwen3-ASR{% endblock %}
+{% block breadcrumb %}Correction{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="mb-8">
+        <h2 class="text-3xl font-extrabold text-[#1f3864]">Correction de la transcription</h2>
+        <p class="text-slate-500 mt-2 flex items-center gap-2">
+            <i class="bi bi-file-earmark-music text-[#2e5496]"></i> {{ job.original_name }}
+        </p>
+    </div>
+
+    <!-- Audio Player -->
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-8 flex items-center gap-4">
+        <div class="bg-[#2e5496] text-white p-3 rounded-lg">
+            <i class="bi bi-play-fill text-2xl"></i>
+        </div>
+        <audio controls class="flex-grow h-10"></audio>
+    </div>
+
+    <form method="POST" id="correctionForm" class="space-y-6">
+        {% csrf_token %}
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Original -->
+            <div class="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col">
+                <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-xl">
+                    <span class="text-sm font-bold text-[#1f3864] uppercase flex items-center gap-2">
+                        <i class="bi bi-robot"></i> Transcription ASR
+                    </span>
+                    <span class="text-xs text-slate-400 font-medium">{{ job.total_words }} mots</span>
+                </div>
+                <div class="p-5 text-base text-slate-800 leading-relaxed font-sans min-h-[400px] max-h-[600px] overflow-y-auto whitespace-pre-wrap">
+                    {{ job.transcript_text }}
+                </div>
+            </div>
+
+            <!-- Editor -->
+            <div class="bg-white border border-slate-300 rounded-xl shadow-sm flex flex-col">
+                <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-emerald-50/30 rounded-t-xl">
+                    <span class="text-sm font-bold text-emerald-700 uppercase flex items-center gap-2">
+                        <i class="bi bi-pencil-square"></i> Édition corrigée
+                    </span>
+                    <span id="charCount" class="text-xs font-bold text-emerald-600">0 car.</span>
+                </div>
+                <textarea name="corrected_text" id="correctedText" 
+                    class="w-full h-full min-h-[400px] p-5 text-base text-slate-900 leading-relaxed border-none focus:ring-0 resize-none font-sans"
+                    placeholder="Saisissez ici la version corrigée..."
+                >{{ job.corrected_text }}</textarea>
+            </div>
+        </div>
+
+        <div class="flex justify-end gap-3 pb-8">
+            <button type="submit" class="bg-[#2e5496] hover:bg-[#1f3864] text-white font-bold py-3 px-8 rounded-xl shadow-lg transition-all flex items-center gap-2">
+                <i class="bi bi-check2-all"></i> Enregistrer les modifications
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const textarea = document.getElementById('correctedText');
+    const charCount = document.getElementById('charCount');
+    textarea.addEventListener('input', () => {
+        charCount.textContent = textarea.value.length + ' car.';
+    });
+</script>
+{% endblock %}
