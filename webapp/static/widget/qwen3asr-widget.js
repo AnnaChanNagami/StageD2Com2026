@@ -13,6 +13,8 @@
  * Options (window.QWEN3ASR_WIDGET) :
  *   apiBase   : origine du serveur Django (ex "http://127.0.0.1:8003")
  *   position  : "bottom-right" (défaut) | "bottom-left" | "top-right" | "top-left"
+ *               (le panneau s'ouvre au-dessus du bouton pour bottom-*,
+ *                en dessous pour top-*, et reste dans le viewport)
  *   accent    : couleur principale (défaut "#3a6fd8")
  *   title     : titre du panneau (défaut "Transcription vocale")
  *   lang      : langue forcée pour l'ASR ("" = auto)
@@ -44,6 +46,9 @@
   /* ------------------------------------------------------------------ *
    * CSS encapsulé (préfixe qw3-)
    * ------------------------------------------------------------------ */
+  var PANEL_OFFSET = (POSITION.indexOf('right') >= 0 ? 'right:0;' : 'left:0;') +
+    (POSITION.indexOf('bottom') === 0 ? 'bottom:74px;' : 'top:74px;');
+
   var CSS =
     '.qw3-widget{position:fixed;z-index:2147483000;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;' +
     'line-height:1.45;}' +
@@ -56,7 +61,7 @@
     '.qw3-fab.qw3-rec{background:linear-gradient(135deg,#e11d48,#9f1239);animation:qw3-pulse 1.4s ease-in-out infinite;}' +
     '.qw3-fab.qw3-busy{background:linear-gradient(135deg,#334155,#0f172a);cursor:progress;}' +
     '.qw3-fab svg{width:26px;height:26px;}' +
-    '.qw3-panel{position:absolute;width:340px;max-width:calc(100vw - 24px);max-height:min(60vh,520px);' +
+    '.qw3-panel{position:absolute;' + PANEL_OFFSET + 'width:340px;max-width:calc(100vw - 24px);max-height:min(60vh,520px);' +
     'display:flex;flex-direction:column;overflow:hidden;border-radius:16px;' +
     'background:rgba(13,27,51,.96);color:#e2e8f0;border:1px solid rgba(90,140,240,.35);' +
     'box-shadow:0 24px 60px rgba(0,0,0,.5);backdrop-filter:blur(10px);}' +
