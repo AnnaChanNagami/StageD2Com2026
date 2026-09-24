@@ -6,7 +6,9 @@ app_name = "transcriptions"
 
 urlpatterns = [
     path("", views.home, name="home"),
-        path("dashboard/", views.dashboard, name="dashboard"),
+    path("widget/", views.widget_standalone, name="widget_standalone"),
+    path("widget/demo/", views.widget_demo, name="widget_demo"),
+    path("dashboard/", views.dashboard, name="dashboard"),
         path("jobs/", views.job_list, name="job_list"),
     path("jobs/create/", views.api_job_create, name="api_job_create"),
     path("jobs/<uuid:job_id>/", views.job_detail, name="job_detail"),

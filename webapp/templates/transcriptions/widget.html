@@ -1,0 +1,74 @@
+{% load static %}<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Widget Qwen3-ASR — Page autonome</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0a1424 0%, #0d1b33 55%, #1f3864 100%);
+    color: #e2e8f0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 30px;
+  }
+  .card {
+    max-width: 560px;
+    text-align: center;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(148,163,184,.18);
+    border-radius: 20px;
+    padding: 40px 32px;
+    backdrop-filter: blur(8px);
+  }
+  .logo {
+    width: 64px; height: 64px; margin: 0 auto 18px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #3a6fd8, #1f3864);
+    display: grid; place-items: center;
+    box-shadow: 0 14px 40px rgba(58,111,216,.4);
+  }
+  .logo svg { width: 30px; height: 30px; fill: #fff; }
+  h1 { font-size: 26px; font-weight: 700; margin-bottom: 10px; }
+  p  { color: #94a3b8; font-size: 14px; line-height: 1.6; }
+  .hint {
+    margin-top: 22px; font-size: 12.5px; color: #64748b;
+    border-top: 1px solid rgba(148,163,184,.15); padding-top: 18px;
+  }
+  code {
+    background: rgba(255,255,255,.08); padding: 2px 7px; border-radius: 6px;
+    color: #b9d2ff; font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="logo">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm0 2a5 5 0 0 1-5-5H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2a5 5 0 0 1-5 5Z"/></svg>
+  </div>
+  <h1>Widget de transcription</h1>
+  <p>Le bouton flottant en bas à droite vous permet d'enregistrer votre voix ou de déposer un fichier audio. La transcription s'affiche dans le panneau.</p>
+  <div class="hint">
+    Pour l'intégrer sur vos propres pages : <code>&lt;script src=".../static/widget/qwen3asr-widget.js"&gt;&lt;/script&gt;</code>
+  </div>
+</div>
+
+<!-- ================== INTÉGRATION WIDGET ================== -->
+<script>
+  window.QWEN3ASR_WIDGET = {
+    apiBase: "{{ request.scheme }}://{{ request.get_host }}",
+    position: "bottom-right",
+    accent: "#3a6fd8",
+    title: "Transcription vocale"
+  };
+</script>
+<script src="{{ request.scheme }}://{{ request.get_host }}{% static 'widget/qwen3asr-widget.js' %}"></script>
+
+</body>
+</html>

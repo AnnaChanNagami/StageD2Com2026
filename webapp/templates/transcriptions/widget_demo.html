@@ -1,0 +1,108 @@
+{% load static %}<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Widget Qwen3-ASR — Démo d'intégration</title>
+
+<!-- ======== Démo : simule un SITE TIERS qui intègre le widget ======== -->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #f1f5f9;
+    color: #0f172a;
+    padding: 40px 20px 100px;
+  }
+  .page {
+    max-width: 780px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 18px 50px rgba(15, 23, 42, .12);
+    padding: 36px 40px;
+  }
+  h1 { font-size: 24px; margin-bottom: 6px; }
+  .sub { color: #64748b; font-size: 14px; margin-bottom: 28px; }
+  h2 { font-size: 16px; margin: 22px 0 10px; }
+  pre, code {
+    background: #0f172a; color: #e2e8f0; border-radius: 10px;
+    font-size: 12.5px; line-height: 1.55;
+  }
+  pre { padding: 16px 18px; overflow-x: auto; margin: 10px 0 4px; }
+  code { padding: 2px 6px; }
+  p  { font-size: 14px; color: #334155; line-height: 1.6; margin: 8px 0; }
+  .badge {
+    display: inline-block; background: #dbeafe; color: #1d4ed8;
+    font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+    margin-bottom: 14px;
+  }
+  .note {
+    background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+    padding: 12px 14px; border-radius: 12px; font-size: 13px; margin-top: 18px;
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <span class="badge">DÉMO — page tierce</span>
+  <h1>Votre site, avec un bouton « Transcrire »</h1>
+  <p class="sub">
+    Cette page simule un site tiers. Le bouton flottant en bas à droite est le
+    <strong>widget Qwen3-ASR</strong> : cliquez pour enregistrer votre voix ou
+    déposez un fichier audio.
+  </p>
+
+  <h2>Comment l'intégrer chez vous ?</h2>
+  <p>Deux lignes de code, n'importe où dans votre &lt;body&gt; :</p>
+  <pre>&lt;script&gt;
+  window.QWEN3ASR_WIDGET = {
+    apiBase: "{{ request.scheme }}://{{ request.get_host }}",
+    position: "bottom-right",
+    accent: "#3a6fd8",
+    title: "Transcription vocale"
+  };
+&lt;/script&gt;
+&lt;script src="{{ request.scheme }}://{{ request.get_host }}{% static 'widget/qwen3asr-widget.js' %}"&gt;&lt;/script&gt;</pre>
+  <p>Le script crée automatiquement le bouton flottant, sans conflit avec votre CSS
+     ni votre JavaScript (tout est encapsulé, préfixe <code>qw3-</code>).</p>
+
+  <h2>Options disponibles</h2>
+  <pre>{
+  apiBase:    "https://votre-serveur-asr",  // requis si script hébergé ailleurs
+  position:   "bottom-right",               // bottom-left | top-right | top-left
+  accent:     "#3a6fd8",                    // couleur principale
+  title:      "Transcription vocale",       // titre du panneau
+  lang:       "",                           // force la langue ("fr", "en"…)
+  timestamps: false,                        // true = segments avec timestamps
+  maxTokens:  512                           // limite de tokens générés
+}</pre>
+
+  <h2>Liens</h2>
+  <p>
+    <a href="{% url 'transcriptions:home' %}">Interface complète</a> ·
+    <a href="{% url 'transcriptions:dashboard' %}">Dashboard</a> ·
+    <a href="{% url 'transcriptions:job_list' %}">Historique</a>
+  </p>
+
+  <div class="note">
+    <strong>Astuce :</strong> le widget fonctionne aussi sur <em>n'importe quel
+    autre domaine</em> tant que le serveur ASR répond en CORS (déjà actif sur
+    cette instance). Testez-le en local en ouvrant cette page directement.
+  </div>
+</div>
+
+<!-- ================== INTÉGRATION WIDGET ================== -->
+<script>
+  window.QWEN3ASR_WIDGET = {
+    apiBase: "{{ request.scheme }}://{{ request.get_host }}",
+    position: "bottom-right",
+    accent: "#3a6fd8",
+    title: "Transcription vocale"
+  };
+</script>
+<script src="{{ request.scheme }}://{{ request.get_host }}{% static 'widget/qwen3asr-widget.js' %}"></script>
+
+</body>
+</html>

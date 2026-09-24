@@ -691,3 +691,21 @@ def _corrections_csv(rows: list[dict]) -> HttpResponse:
             f"{r['wer']:.1f}".replace(".", ","), r["asr_text"], r["corrected_text"],
         ])
     return response
+
+
+# ============================================================
+# Widget embarquable (bouton de transcription cross-domaine)
+# ============================================================
+
+def widget_standalone(request):
+    """Page autonome qui héberge le widget (équivalent iframe/script).
+
+    Sert uniquement à tester le widget sur le même serveur ; le widget
+    fonctionne aussi depuis n'importe quel site tiers.
+    """
+    return render(request, "transcriptions/widget.html", {"active": "widget"})
+
+
+def widget_demo(request):
+    """Page de démonstration montrant comment intégrer le widget."""
+    return render(request, "transcriptions/widget_demo.html", {"active": "widget"})
