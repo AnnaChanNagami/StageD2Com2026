@@ -8,18 +8,24 @@ export SRT / TXT / JSON.
 """
 
 from pathlib import Path
+import os
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+# Construit des chemins dans le projet comme ceci : BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Répertoire racine du dépôt cloné (contient qwen_asr/).
+# Répertoire racine du dépôt cloné (contient qwen_asr/, widget/).
 # webapp/ est un sous-dossier du dépôt.
 REPO_ROOT = BASE_DIR.parent
 
-# Quick-start development settings - unsuitable for production
+# Rend l'app autonome widget/ (à la racine du dépôt) importable depuis webapp/.
+import sys
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+# Quick-start des paramètres de développement - inadapté pour la production
 SECRET_KEY = 'django-insecure-qwen3-asr-local-webapp-secret-key-7kd!$=^w&'
 
-# SECURITY WARNING: don't run with debug turned on in production!
+# ATTENTION : ne pas utiliser DEBUG=True en production, car cela peut exposer des informations sensibles 
 DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
@@ -33,14 +39,15 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.humanize',
-    'transcriptions',
-]
+        'transcriptions',
+        'widget',
+    ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'qwenweb.middleware.CorsAllowAllMiddleware',
+    'widget.middleware.WidgetCorsMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -52,7 +59,7 @@ ROOT_URLCONF = 'qwenweb.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],
+        'DIRS': [BASE_DIR / 'templates', REPO_ROOT / 'widget' / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -66,7 +73,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'qwenweb.wsgi.application'
 
-# Database
+# Base de données
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -74,7 +81,7 @@ DATABASES = {
     }
 }
 
-# Password validation
+# Validation des mots de passe
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -88,9 +95,9 @@ TIME_ZONE = 'Europe/Paris'
 USE_I18N = True
 USE_TZ = True
 
-# Static files
+# fichiers statiques ( CSS, JavaScript, images)
 STATIC_URL = 'static/'
-STATICFILES_DIRS = [BASE_DIR / 'static']
+STATICFILES_DIRS = [BASE_DIR / 'static', REPO_ROOT / 'widget' / 'static']
 
 # Media (fichiers audio téléversés + exports)
 MEDIA_URL = '/media/'
@@ -129,5 +136,18 @@ QWEN_BACKEND = "transformers"
 # Nom de la base affiché dans l'interface
 QWEN_APP_TITLE = "Qwen3-ASR Web"
 
-# DEFAULT_AUTO_FIELD
+# Remplissage automatique du champ "prompt" avec des mots-clés pour guider la transcription
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ---------------------------------------------------------------------------
+# Conservation des données (RGPD — art. 5.1.e : limitation de la conservation)
+# ---------------------------------------------------------------------------
+# Les audios et transcriptions contiennent potentiellement des données à
+# caractère personnel : ils sont supprimés après RGPD_RETENTION_MONTHS mois.
+# La purge est déclenchée automatiquement par le worker (voir run_worker.py)
+# et peut aussi être lancée manuellement :  python manage.py purge_expired
+RGPD_RETENTION_MONTHS = int(os.environ.get("QWEN_RGPD_RETENTION_MONTHS", "6"))
+# False = ne purger que manuellement (via la commande), sans depuis le worker.
+RGPD_AUTO_PURGE = os.environ.get("QWEN_RGPD_AUTO_PURGE", "1") not in ("0", "false", "False")
+# Fréquence (en secondes) des vérifications de purge dans la boucle du worker.
+RGPD_PURGE_INTERVAL_SEC = int(os.environ.get("QWEN_RGPD_PURGE_INTERVAL_SEC", str(6 * 3600)))

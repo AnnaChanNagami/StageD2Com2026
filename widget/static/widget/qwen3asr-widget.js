@@ -20,6 +20,10 @@
  *   lang      : langue forcée pour l'ASR ("" = auto)
  *   timestamps: true pour activer timestamps/segments (SRT)
  *   maxTokens : limite de tokens générés
+ *   history   : false pour masquer l'historique (défaut true)
+ *   historyMax: nombre d'entrées conservées (défaut 30)
+ *   download  : false pour masquer le bouton de téléchargement (défaut true)
+ *   format    : 'txt' (défaut) ou 'json' — format du fichier téléchargé
  */
 (function () {
   'use strict';
@@ -30,6 +34,19 @@
   var POSITION = ['bottom-right', 'bottom-left', 'top-right', 'top-left'].indexOf(CONFIG.position) >= 0 ? CONFIG.position : 'bottom-right';
   var ACCENT = CONFIG.accent || '#3a6fd8';
   var TITLE = CONFIG.title || 'Transcription vocale';
+  // `history` doit être un booléen explicite : sans ça, `history: 0` ou
+  // `history: ''` seraient traités comme « activé » (truthy).
+  var HISTORY_ON = CONFIG.history !== false && CONFIG.history !== 0 && CONFIG.history !== 'false';
+  // `download` : false masque entièrement le bouton de téléchargement.
+  function isDownloadOn() {
+    var cfg = window.QWEN3ASR_WIDGET || {};
+    return cfg.download !== false && cfg.download !== 0 && cfg.download !== 'false';
+  }
+  // `format` : 'txt' (défaut) ou 'json'.
+  function getFormat() {
+    var cfg = window.QWEN3ASR_WIDGET || {};
+    return String(cfg.format || 'txt').toLowerCase() === 'json' ? 'json' : 'txt';
+  }
 
   /* ------------------------------------------------------------------ *
    * API_BASE : déduction automatique depuis l'origine du script
@@ -106,6 +123,27 @@
     'border:1px solid rgba(90,140,240,.4);border-radius:12px;padding:10px 16px;font-size:13px;' +
     'box-shadow:0 12px 40px rgba(0,0,0,.5);' + (POSITION.indexOf('top') === 0 ? 'top:90px;bottom:auto;' : '') + '}' +
     '.qw3-spin{animation:qw3-spin .9s linear infinite;}' +
+    /* Historique */
+    '.qw3-hist-item{display:block;width:100%;text-align:left;border:1px solid rgba(255,255,255,.08);cursor:pointer;' +
+    'background:rgba(255,255,255,.04);border-radius:11px;padding:9px 11px;color:#e2e8f0;' +
+    'transition:background .12s ease,border-color .12s ease;}' +
+    '.qw3-hist-row{display:flex;align-items:stretch;gap:6px;margin-bottom:8px;}' +
+    '.qw3-hist-row .qw3-hist-item{flex:1 1 auto;min-width:0;margin-bottom:0;}' +
+    '.qw3-hist-dl{flex:none;width:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;' +
+    'border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);border-radius:11px;color:#94a3b8;' +
+    'transition:background .12s ease,color .12s ease,border-color .12s ease;}' +
+    '.qw3-hist-dl:hover{background:rgba(90,140,240,.18);color:#e2e8f0;border-color:rgba(90,140,240,.36);}' +
+    '.qw3-hist-dl svg{width:17px;height:17px;}' +
+    '.qw3-hist-item:hover{background:rgba(90,140,240,.14);border-color:rgba(90,140,240,.34);}' +
+    '.qw3-hist-head{display:flex;align-items:baseline;gap:8px;font-size:12.5px;font-weight:600;color:#f1f5f9;}' +
+    '.qw3-hist-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}' +
+    '.qw3-hist-when{margin-left:auto;flex:none;font-size:10.5px;font-weight:500;color:#7c8aa5;}' +
+    '.qw3-hist-preview{margin-top:3px;font-size:11.5px;color:#94a3b8;overflow:hidden;' +
+    'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}' +
+    '.qw3-hist-item.qw3-hist-failed{border-color:rgba(225,29,72,.3);}' +
+    '.qw3-hist-item.qw3-hist-failed .qw3-hist-name{color:#fda4af;}' +
+    '.qw3-hist-empty{font-size:12.5px;color:#7c8aa5;text-align:center;padding:18px 6px;}' +
+    '.qw3-hist-note{font-size:10.5px;color:#64748b;margin-top:2px;}' +
     '@keyframes qw3-spin{to{transform:rotate(360deg);}}' +
     '@keyframes qw3-pulse{0%,100%{box-shadow:0 0 0 0 rgba(225,29,72,.5);}50%{box-shadow:0 0 0 14px rgba(225,29,72,0);}}' +
     '@keyframes qw3-blink{50%{opacity:.35;}}';
@@ -127,6 +165,10 @@
     folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
     copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
     refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4h-4"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M6 7l1 13h10l1-13"/></svg>',
+    download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+    clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
+    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>',
     close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>'
   };
 
@@ -157,7 +199,9 @@
       '<button type="button" class="qw3-btn qw3-primary qw3-act-record">' + SVGS.mic + '<span></span></button>' +
       '<button type="button" class="qw3-btn qw3-act-file">' + SVGS.folder + '<span>Fichier</span></button>' +
       '<button type="button" class="qw3-btn qw3-act-copy" hidden>' + SVGS.copy + '<span>Copier</span></button>' +
+      '<button type="button" class="qw3-btn qw3-act-download" hidden>' + SVGS.download + '<span>Télécharger</span></button>' +
       '<button type="button" class="qw3-btn qw3-danger qw3-act-reset" hidden>' + SVGS.refresh + '<span>Effacer</span></button>' +
+      '<button type="button" class="qw3-btn qw3-act-history">' + SVGS.clock + '<span>Historique</span></button>' +
     '</div>';
 
   var fab = document.createElement('button');
@@ -193,7 +237,9 @@
   var btnRec = root.querySelector('.qw3-act-record');
   var btnFile = root.querySelector('.qw3-act-file');
   var btnCopy = root.querySelector('.qw3-act-copy');
+  var btnDownload = root.querySelector('.qw3-act-download');
   var btnReset = root.querySelector('.qw3-act-reset');
+  var btnHist = root.querySelector('.qw3-act-history');
   var lastTranscript = '';
 
   titleEl.textContent = TITLE;
@@ -243,6 +289,7 @@
       btnRec.innerHTML = SVGS.mic + '<span>Enregistrer</span>';
       btnFile.hidden = false;
       btnCopy.hidden = true;
+      if (btnDownload) btnDownload.hidden = true;
       btnReset.hidden = true;
     } else if (state === 'recording') {
       setFab('stop', 'qw3-rec', "Arrêter l'enregistrement");
@@ -253,6 +300,7 @@
       btnRec.innerHTML = SVGS.stop + '<span>Arrêter</span>';
       btnFile.hidden = true;
       btnCopy.hidden = true;
+      if (btnDownload) btnDownload.hidden = true;
       btnReset.hidden = false;
     } else if (state === 'processing') {
       setFab('spin', 'qw3-busy', 'Transcription en cours');
@@ -263,6 +311,7 @@
       btnRec.hidden = true;
       btnFile.hidden = true;
       btnCopy.hidden = true;
+      if (btnDownload) btnDownload.hidden = true;
       btnReset.hidden = true;
     } else if (state === 'done') {
       setFab('check', '', 'Transcription terminée');
@@ -281,6 +330,7 @@
       btnRec.innerHTML = SVGS.mic + '<span>Nouvelle</span>';
       btnFile.hidden = false;
       btnCopy.hidden = !lastTranscript;
+      if (btnDownload) btnDownload.hidden = !lastTranscript;
       btnReset.hidden = false;
     } else if (state === 'error') {
       setFab('alert', '', 'Réessayer');
@@ -290,6 +340,7 @@
       btnRec.innerHTML = SVGS.mic + '<span>Réessayer</span>';
       btnFile.hidden = false;
       btnCopy.hidden = true;
+      if (btnDownload) btnDownload.hidden = true;
       btnReset.hidden = false;
     }
   }
@@ -311,7 +362,10 @@
 
   function openPanel() {
     panel.hidden = false;
-    render();
+    // Au retour sur le panneau on peut être dans la vue historique : on
+    // laisse le titre et les boutons tels quels, render() ne sert qu'à l'état
+    // principal.
+    if (view === 'main') render();
   }
 
   function closePanel() {
@@ -343,6 +397,7 @@
         var ext = type === 'audio/mp4' ? 'm4a' : 'webm';
         var blob = new Blob(chunks, { type: type });
         var file = new File([blob], 'enregistrement.' + ext, { type: type });
+        lastFileName = file.name;
         upload(file);
       };
       recorder.onerror = function () { stopRecording(); setError('Erreur de l\'enregistrement audio.'); };
@@ -382,7 +437,7 @@
     if (CONFIG.timestamps) fd.append('timestamps', '1');
     if (CONFIG.maxTokens) fd.append('max_new_tokens', CONFIG.maxTokens);
 
-    fetch(API_BASE + '/jobs/create/', { method: 'POST', body: fd })
+    fetch(API_BASE + '/widget/api/upload/', { method: 'POST', body: fd })
       .then(function (resp) {
         return resp.json().then(function (data) {
           if (!resp.ok) throw new Error(data.error || ('Erreur serveur (' + resp.status + ')'));
@@ -402,7 +457,7 @@
   function pollStatus(id, attempt) {
     attempt = attempt || 0;
     clearTimeout(pollTimer);
-    fetch(API_BASE + '/api/status/' + id + '/')
+    fetch(API_BASE + '/widget/api/status/' + id + '/')
       .then(function (resp) {
         if (!resp.ok) throw new Error('Le serveur n\'a pas répondu (' + resp.status + ').');
         return resp.json();
@@ -415,9 +470,27 @@
             words: lastTranscript.trim() ? lastTranscript.trim().split(/\s+/).length : 0,
             elapsed: data.elapsed_sec ? Math.round(data.elapsed_sec) : null
           };
+          historyAdd({
+            id: String(data.id),
+            name: data.original_name || jobId || 'Sans nom',
+            text: lastTranscript,
+            language: jobMeta.language,
+            elapsed: jobMeta.elapsed,
+            at: data.completed_at ? Date.parse(data.completed_at) : Date.now()
+          });
           setProgress(100, 'Terminé');
           setState('done');
         } else if (data.status === 'failed') {
+          // On garde la trace de l'échec : sans elle, un fichier audio cassé
+          // (voir le WAV vide) disparaît silencieusement de l'historique.
+          historyAdd({
+            id: String(data.id),
+            name: data.original_name || jobId || 'Sans nom',
+            text: '',
+            failed: true,
+            error: data.error || '',
+            at: Date.now()
+          });
           setError(data.error || 'La transcription a échoué côté serveur.');
         } else {
           var pct = 12 + Math.round(((data.progress || 0) / 100) * 70);
@@ -437,6 +510,145 @@
   /* ------------------------------------------------------------------ *
    * Erreurs / reset
    * ------------------------------------------------------------------ */
+  /* ------------------------------------------------------------------ *
+   * Historique (localStorage, scoped à ce navigateur)
+   * ------------------------------------------------------------------ *
+   * Volontairement PAS de nouvel endpoint « liste des transcriptions » :
+   * le widget est CORS allow-all et sans authentification, donc une liste
+   * serveur exposerait à n'importe quel site tiers les transcriptions de
+   * tous les utilisateurs. On ne garde que les jobs créés par ce navigateur,
+   * et le texte est stocké localement (les audios ne le sont pas : c'est le
+   * serveur qui applique la purge RGPD).
+   */
+  var LS_KEY = 'qw3asr.history.v1';
+  var view = 'main'; // main | history
+  var histItems = [];
+
+  function histLimit() {
+    var n = parseInt(CONFIG.historyMax, 10);
+    return isFinite(n) && n > 0 ? n : 30;
+  }
+
+  function loadHistory() {
+    histItems = [];
+    if (!HISTORY_ON) return;
+    try {
+      var raw = window.localStorage.getItem(LS_KEY);
+      var arr = raw ? JSON.parse(raw) : [];
+      if (Object.prototype.toString.call(arr) !== '[object Array]') return;
+      histItems = arr.filter(function (e) {
+        return e && typeof e.id === 'string' && typeof e.text === 'string';
+      });
+      // On respecte la limite au chargement aussi : un `historyMax` réduit
+      // après coup ne doit pas laisser les anciennes entrées à l'écran.
+      histItems = histItems.slice(0, histLimit());
+    } catch (e) {
+      // localStorage indisponible (mode privé, cookies bloqués) : historique
+      // désactivé silencieusement plutôt que de casser le widget.
+      histItems = [];
+    }
+  }
+
+  function saveHistory() {
+    if (!HISTORY_ON) return;
+    try {
+      window.localStorage.setItem(LS_KEY, JSON.stringify(histItems.slice(0, histLimit())));
+    } catch (e) {
+      // Quota dépassé : on tronque au lieu d'échouer (le widget doit rester
+      // utilisable même si le texte transcrit est volumineux).
+      try {
+        histItems = histItems.slice(0, Math.max(1, Math.floor(histLimit() / 2)));
+        window.localStorage.setItem(LS_KEY, JSON.stringify(histItems));
+      } catch (e2) { /* abandon : l'historique est un confort, pas un contrat */ }
+    }
+  }
+
+  function historyAdd(entry) {
+    if (!HISTORY_ON) return;
+    loadHistory();
+    // On déduplique par id : recharger un job déjà connu ne le double pas.
+    histItems = histItems.filter(function (e) { return e.id !== entry.id; });
+    histItems.unshift(entry);
+    histItems = histItems.slice(0, histLimit());
+    saveHistory();
+  }
+
+  function historyRemove(id) {
+    histItems = histItems.filter(function (e) { return e.id !== id; });
+    saveHistory();
+  }
+
+  function historyClear() {
+    histItems = [];
+    saveHistory();
+  }
+
+  function fmtWhen(ts) {
+    var d = new Date(ts);
+    if (isNaN(d.getTime())) return '';
+    var today = new Date();
+    var sameDay = d.toDateString() === today.toDateString();
+    var hh = String(d.getHours()).padStart(2, '0');
+    var mm = String(d.getMinutes()).padStart(2, '0');
+    if (sameDay) return hh + ':' + mm;
+    return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + ' ' + hh + ':' + mm;
+  }
+
+  function renderHistory() {
+    if (!histItems.length) {
+      bodyEl.innerHTML = '<div class="qw3-hist-empty">Aucune transcription enregistrée.<br>' +
+        '<span class="qw3-hist-note">Vos transcriptions apparaîtront ici, sur cet appareil uniquement.</span></div>';
+      return;
+    }
+    bodyEl.innerHTML = histItems.map(function (e) {
+      var preview = e.text.trim() || (e.failed ? (e.error || 'Échec de la transcription') : '—');
+      var dlBtn = isDownloadOn() ? '<button type="button" class="qw3-hist-dl" data-dl="' + esc(e.id) + '" title="Télécharger">' + SVGS.download + '</button>' : '';
+      return '<div class="qw3-hist-row">' +
+        '<button type="button" class="qw3-hist-item' + (e.failed ? ' qw3-hist-failed' : '') + '" data-id="' + esc(e.id) + '">' +
+        '<div class="qw3-hist-head"><span class="qw3-hist-name">' + esc(e.name || 'Sans nom') + '</span>' +
+        '<span class="qw3-hist-when">' + esc(fmtWhen(e.at)) + '</span></div>' +
+        '<div class="qw3-hist-preview">' + esc(preview) + '</div></button>' +
+        dlBtn +
+        '</div>';
+    }).join('');
+  }
+
+  function showHistory() {
+    loadHistory();
+    view = 'history';
+    titleEl.textContent = 'Historique';
+    bodyEl.innerHTML = '';
+    renderHistory();
+    btnRec.innerHTML = SVGS.back + '<span>Retour</span>';
+    btnFile.hidden = true;
+    btnCopy.hidden = true;
+    if (btnDownload) btnDownload.hidden = true;
+    btnReset.hidden = !histItems.length;
+    btnReset.innerHTML = SVGS.trash + '<span>Tout effacer</span>';
+    btnHist.hidden = true;
+    btnRec.hidden = false;
+  }
+
+  // Rouvre une transcription de l'historique dans la vue principale. Le texte
+  // vient du localStorage : aucun aller-retour réseau nécessaire.
+  function openHistoryEntry(id) {
+    var e = histItems.filter(function (x) { return x.id === id; })[0];
+    if (!e) return;
+    view = 'main';
+    titleEl.textContent = TITLE;
+    lastTranscript = e.text || '';
+    jobMeta = { language: e.language || '', words: lastTranscript.trim() ? lastTranscript.trim().split(/\s+/).length : 0, elapsed: e.elapsed || null };
+    setState('done');
+  }
+
+  function showMain() {
+    view = 'main';
+    titleEl.textContent = TITLE;
+    btnHist.hidden = !HISTORY_ON;
+    btnReset.innerHTML = SVGS.refresh + '<span>Effacer</span>';
+    render();
+  }
+
   function setError(msg) {
     lastError = msg;
     clearTimeout(pollTimer);
@@ -446,6 +658,7 @@
 
   function resetAll() {
     clearTimeout(pollTimer);
+    if (view === 'history') { showMain(); return; }
     if (recorder && recorder.state !== 'inactive') { try { recorder.stop(); } catch (e) {} }
     if (mediaStream) mediaStream.getTracks().forEach(function (t) { t.stop(); });
     recorder = null; mediaStream = null; chunks = []; jobId = null; jobMeta = null;
@@ -470,6 +683,74 @@
       ta.select();
       try { document.execCommand('copy'); done(); } catch (e) { toast('Copie impossible — sélectionnez le texte manuellement.'); }
       ta.remove();
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Téléchargement
+   * ------------------------------------------------------------------ */
+  var lastFileName = '';
+
+  function baseName(name) {
+    var n = String(name || '').replace(/^.*[\\\/]/, '');
+    return n.replace(/\.[^.]+$/, '') || 'transcription';
+  }
+
+  function buildExport(entry, format) {
+    var e = entry || {};
+    var text = e.text || lastTranscript || '';
+    var meta = e.meta || jobMeta || {};
+    var name = e.name || lastFileName || '';
+    if (format === 'txt') {
+      var lines = [text];
+      var extras = [];
+      if (name) extras.push('Fichier : ' + name);
+      if (meta.language) extras.push('Langue : ' + meta.language);
+      if (meta.words) extras.push('Mots : ' + meta.words);
+      if (meta.elapsed) extras.push('Analyse : ' + meta.elapsed + ' s');
+      if (e.at) extras.push('Date : ' + fmtWhen(e.at));
+      if (extras.length) lines.push('', '---', extras.join('\n'));
+      return lines.join('\n');
+    }
+    return JSON.stringify({
+      text: text,
+      file: name || null,
+      language: meta.language || null,
+      words: meta.words || null,
+      elapsed: meta.elapsed || null,
+      date: e.at ? new Date(e.at).toISOString() : null,
+      source: 'Qwen3-ASR'
+    }, null, 2);
+  }
+
+  function downloadTranscript(entry) {
+    if (!lastTranscript && !(entry && entry.text)) return;
+    var format = getFormat();
+    var payload = buildExport(entry, format);
+    var mime = format === 'txt' ? 'text/plain;charset=utf-8' : 'application/json;charset=utf-8';
+    var name = baseName(entry && entry.name ? entry.name : lastFileName) + '.' + format;
+    try {
+      if (window.navigator && window.navigator.msSaveBlob) {
+        window.navigator.msSaveBlob(new Blob([payload], {type: mime}), name);
+        toast('Transcription téléchargée.');
+        return;
+      }
+      var blob = new Blob([payload], {type: mime});
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.rel = 'noopener';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () {
+        URL.revokeObjectURL(url);
+        a.remove();
+      }, 1500);
+      toast('Transcription téléchargée.');
+    } catch (err) {
+      toast('Téléchargement impossible dans ce contexte.');
     }
   }
 
@@ -508,6 +789,7 @@
   closeBtn.addEventListener('click', closePanel);
 
   btnRec.addEventListener('click', function () {
+    if (view === 'history') { showMain(); return; }
     if (state === 'recording') stopRecording();
     else if (state === 'processing') toast('Transcription en cours, patientez…');
     else if (state === 'done' || state === 'error') resetAll();
@@ -521,7 +803,39 @@
   });
 
   btnCopy.addEventListener('click', copyTranscript);
-  btnReset.addEventListener('click', resetAll);
+  btnReset.addEventListener('click', function () {
+    if (view === 'history') {
+      historyClear();
+      renderHistory();
+      btnReset.hidden = true;
+      toast('Historique effacé.');
+      return;
+    }
+    resetAll();
+  });
+
+  // Délégation d'événement : les entrées sont re-rendues à chaque affichage,
+  // on écoute donc sur le conteneur plutôt que sur chaque <button>.
+  bodyEl.addEventListener('click', function (e) {
+    var dl = e.target.closest ? e.target.closest('.qw3-hist-dl') : null;
+    if (dl) {
+      e.stopPropagation();
+      var hit = histItems.filter(function (x) { return x.id === dl.getAttribute('data-dl'); })[0];
+      if (hit) downloadTranscript(hit);
+      return;
+    }
+    var item = e.target.closest ? e.target.closest('.qw3-hist-item') : null;
+    if (item) openHistoryEntry(item.getAttribute('data-id'));
+  });
+
+  if (btnHist) {
+    btnHist.addEventListener('click', showHistory);
+    btnHist.hidden = !HISTORY_ON;
+  }
+  if (btnDownload) {
+    btnDownload.addEventListener('click', function () { downloadTranscript(null); });
+    btnDownload.hidden = !isDownloadOn();
+  }
 
   function handleFile(file) {
     if (!file) return;
@@ -530,6 +844,7 @@
       setError('Format non pris en charge : ' + esc(file.name));
       return;
     }
+    lastFileName = file.name || '';
     if (state === 'recording') stopRecording();
     setState('processing');
     setProgress(4, 'Envoi de ' + esc(file.name) + ' (' + fmtSize(file.size) + ')…');
@@ -545,7 +860,10 @@
       transcribe: function (file) { handleFile(file); return window.Qwen3ASRWidget; },
       reset: function () { resetAll(); },
       open: function () { openPanel(); },
-      close: function () { closePanel(); }
+      close: function () { closePanel(); },
+      history: function () { openPanel(); showHistory(); },
+      clearHistory: function () { historyClear(); },
+      download: function (entry) { downloadTranscript(entry); return window.Qwen3ASRWidget; }
     };
     if (!API_BASE) {
       console.warn('[Qwen3-ASR Widget] apiBase non détecté — renseignez window.QWEN3ASR_WIDGET.apiBase.');

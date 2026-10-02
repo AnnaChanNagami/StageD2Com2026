@@ -1,18 +1,17 @@
-"""
-Pont entre Django et la bibliothèque qwen_asr (Qwen3-ASR).
+#Pont entre Django et la bibliothèque qwen_asr (Qwen3-ASR).
+#Encapsule tout ce qui touche au modèle :
+# - chargement paresseux et singleton du Qwen3ASRModel
+# - transcription d'un fichier audio (bloquant — réservé au worker)
+# - extraction de la durée audio
+# - parsing des timestamps (forced aligner) en segments pour l'interface
+# - calcul des métriques et génération des exports TXT / JSON / SRT
 
-Encapsule tout ce qui touche au modèle :
-  - chargement paresseux et singleton du Qwen3ASRModel
-  - transcription d'un fichier audio (bloquant — réservé au worker)
-  - extraction de la durée audio
-  - parsing des timestamps (forced aligner) en segments pour l'interface
-  - calcul des métriques et génération des exports TXT / JSON / SRT
+# Si torch / transformers / le modèle ne sont pas disponibles (machine sans GPU,
+# premier téléchargement des poids pas encore fait), les fonctions liées au modèle
+# dégradent proprement au lieu de crasher : la durée et les exports restent
+#fonctionnels.
 
-Si torch / transformers / le modèle ne sont pas disponibles (machine sans GPU,
-premier téléchargement des poids pas encore fait), les fonctions liées au modèle
-dégradent proprement au lieu de crasher : la durée et les exports restent
-fonctionnels.
-"""
+
 from __future__ import annotations
 
 import io
@@ -20,7 +19,7 @@ import json
 from pathlib import Path
 
 from django.conf import settings
-
+# Différents imports pour le support de l'audio
 try:
     import torch
     from qwen_asr import Qwen3ASRModel
@@ -35,13 +34,13 @@ except Exception:  # noqa: BLE001 - la bibliothèque peut manquer
         "Dutch", "Swedish", "Danish", "Finnish", "Polish", "Czech",
         "Filipino", "Persian", "Greek", "Romanian", "Hungarian", "Macedonian",
     ]
-
+# Si la langue ne fait pas partie de la liste, elle ne sera pas supportée par le modèle.
 
 # --- Singleton du modèle --------------------------------------------------
 
 _model = None
 
-
+#------------------Fonction get_model() pour charger Qwen3-----------------------------------------------------------
 def get_model():
     """Crée (une seule fois) le Qwen3ASRModel selon la configuration Django."""
     global _model
@@ -62,17 +61,16 @@ def get_model():
             **kwargs,
         )
     return _model
-
-
+#------------------Fonction pour appeler le modèle et vérifier si le backend est disponible--------------------------------
 def backend_available() -> bool:
     """Le backend complet (torch + modèle) est-il utilisable ?"""
     return QWEN_OK
 
-
+#------------------Fonction pour lister les langues supportées par le modèle---------------------------------------------------
 def supported_languages() -> list[str]:
     return list(_QWEN_LANGS)
 
-
+#------------------Fonction pour obtenir les informations sur l'environnement d'exécution du modèle---------------------------
 def runtime_info() -> dict:
     if not QWEN_OK:
         return {
@@ -81,27 +79,34 @@ def runtime_info() -> dict:
             "device": settings.QWEN_DEVICE,
             "dtype": settings.QWEN_DTYPE,
         }
-    try:
-        m = get_model()
-        info = {
+    # NE PAS appeler get_model() ici : cette fonction est appelée par les vues
+    # (home, dashboard) à CHAQUE requête HTTP. Charger les poids (5,6 Go) dans le
+    # processus du serveur web saturait la VRAM et faisait crasher le worker
+    # (exit 139, CUDA OOM) sur une carte 6 Go. Les infos ci-dessous ne dépendent
+    # que des settings, pas du modèle chargé.
+    if _model is None:
+        return {
             "backend": "qwen3-asr (transformers)",
             "model": settings.QWEN_ASR_MODEL,
-            "device": str(getattr(m, "device", settings.QWEN_DEVICE)),
-            "dtype": str(getattr(getattr(m, "model", None), "dtype", "") or settings.QWEN_DTYPE),
+            "device": str(settings.QWEN_DEVICE),
+            "dtype": str(settings.QWEN_DTYPE),
             "languages": len(supported_languages()),
             "forced_aligner": bool(settings.QWEN_FORCED_ALIGNER),
+            "model_loaded": False,
         }
-        return info
-    except Exception:  # noqa: BLE001
-        return {
-            "backend": "unavailable",
-            "model": settings.QWEN_ASR_MODEL,
-            "device": settings.QWEN_DEVICE,
-            "dtype": settings.QWEN_DTYPE,
-        }
+    info = {
+        "backend": "qwen3-asr (transformers)",
+        "model": settings.QWEN_ASR_MODEL,
+        "device": str(getattr(_model, "device", settings.QWEN_DEVICE)),
+        "dtype": str(getattr(getattr(_model, "model", None), "dtype", "") or settings.QWEN_DTYPE),
+        "languages": len(supported_languages()),
+        "forced_aligner": bool(settings.QWEN_FORCED_ALIGNER),
+        "model_loaded": True,
+    }
+    return info
 
 
-# --- Durée audio ----------------------------------------------------------
+# -------------------- Fonction pour la durée audio ----------------------------------------------------------
 
 def audio_duration(path) -> float | None:
     """Durée (secondes) d'un fichier audio, sans charger le modèle."""
@@ -118,8 +123,8 @@ def audio_duration(path) -> float | None:
             return None
 
 
-# --- Transcription ----------------------------------------------------------
-
+# -------------------Fonction pour lancer la transcription ----------------------------------------------------------
+"""Définition des étapes de la transcription pour le suivi de progression."""
 STAGES = {
     "loading_model": "Chargement du modèle…",
     "transcribing": "Transcription en cours…",
@@ -129,7 +134,8 @@ STAGES = {
     "error": "Erreur",
 }
 
-
+""" Fonction principale pour exécuter la transcription d'un fichier audio avecc Qwen3-ASR
++ Suivi de la transcription avec un callback pour les MAJ de progression"""
 def run_transcription(job, on_status=None) -> None:
     """Exécute la transcription pour un TranscriptionJob (réservé au worker)."""
     from .models import TranscriptionJob
@@ -147,7 +153,7 @@ def run_transcription(job, on_status=None) -> None:
     except Exception as exc:  # noqa: BLE001
         _fail(job, f"Impossible de charger le modèle : {type(exc).__name__}: {exc}")
         return
-
+#---------------Suivi de la transcription---------------------------------------------------------------------------------------
     # Durée audio (pas bloquant, fait dans le worker avant l'inférence)
     if job.duration_sec is None:
         job.duration_sec = audio_duration(job.audio_file.path)
@@ -166,7 +172,7 @@ def run_transcription(job, on_status=None) -> None:
     except Exception as exc:  # noqa: BLE001
         _fail(job, f"{type(exc).__name__}: {exc}")
         return
-
+#--------------Mise à jour du travail effectué après le transcription et l'allignement des timestamps---------------------------
     job.transcript_text = (result.text or "").strip()
     job.language_detected = (result.language or "").strip()
 
@@ -188,7 +194,7 @@ def run_transcription(job, on_status=None) -> None:
                 }
             )
 
-    # If no timestamps from forced aligner, create a single segment with full text
+    # Si aucun segment n'a été généré, on crée un segment unique avec tout le texte
     if not segments and job.transcript_text.strip():
         segments.append(
             {
@@ -210,8 +216,7 @@ def run_transcription(job, on_status=None) -> None:
     job.stage = "done"
     job.set_status(TranscriptionJob.Status.COMPLETED)
     job.save()
-
-
+#---------------Fonction pour gérer les erreurs de transcription et mettre à jour le statut du travail en conséquence---------------------
 def _fail(job, message: str) -> None:
     from .models import TranscriptionJob
     job.status = TranscriptionJob.Status.FAILED
@@ -223,7 +228,7 @@ def _fail(job, message: str) -> None:
 
 
 # --- Exports ------------------------------------------------------------------
-
+#--------------Fonctions pour générer des exports SRT / JSON à partir des segments dict.-----------------------------------------
 def render_export(kind: str, segments: list[dict]) -> str:
     """Rend un export SRT / JSON à partir de segments dict."""
     if kind == "json":
@@ -232,17 +237,24 @@ def render_export(kind: str, segments: list[dict]) -> str:
         return build_srt(segments)
     raise ValueError(f"Export inconnu : {kind}")
 
-
+#--------------Fonction pour formater les timestamps en format SRT (HH:MM:SS,mmm)-------------------------------------------------------
 def _fmt_ts(sec: float) -> str:
     """Formate une durée en secondes au format SRT (HH:MM:SS,mmm)."""
     sec = max(0.0, float(sec or 0.0))
-    ms = int(round((sec - int(sec)) * 1000))
-    h = int(sec // 3600)
-    m = int((sec % 3600) // 60)
-    s = int(sec % 60)
+    # Arrondir la fraction de seconde pouvait produire 1000 (carry), donc un
+    # champ ",1000" à 4 chiffres — invalide en SRT. On arrondit le TOTAL en
+    # millisecondes puis on décompose : le carry est absorbé par la seconde,
+    # et les erreurs de représentation flottante (0.029*1000 = 28.999…) sont
+    # absorbées par le round.
+    total_ms = int(round(sec * 1000))
+    ms = total_ms % 1000
+    total_s = total_ms // 1000
+    h = total_s // 3600
+    m = (total_s % 3600) // 60
+    s = total_s % 60
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
-
+#--------------Fonction pour construire un fichier SRT à partir des segments dict.----------------------------------------------------
 def build_srt(segments: list[dict]) -> str:
     lines = []
     for i, seg in enumerate(segments, start=1):
@@ -257,6 +269,6 @@ def build_srt(segments: list[dict]) -> str:
         lines.append("")
     return "\n".join(lines).strip() + "\n"
 
-
+#--------------Fonction pour obtenir la transcription brute d'un travail de transcription----------------------------------------
 def raw_transcript(job) -> str:
     return (job.transcript_text or "").strip() + "\n"

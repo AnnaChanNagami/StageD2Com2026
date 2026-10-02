@@ -37,6 +37,50 @@ dependencies = [
 vllm = [
   "vllm==0.14.0",
 ]
+# Dépendances de l'application Django (webapp/), absentes des deps du cœur Qwen
+# qui servent aussi aux usages CLI/library sans interface web.
+webapp = [
+  "django>=5.2",
+  "fpdf2==2.8.9",   # export PDF du compte rendu de transcription (pdf_export.py)
+]
+# Outils de test : pypdf relit le PDF généré pour vérifier le texte extrait.
+dev = [
+  "pypdf>=5.0",
+]
+
+[tool.pytest.ini_options]
+# `tests.py` (nom imposé par la convention Django) ne correspond pas aux motifs
+# par défaut de pytest (test_*.py / *_test.py) : sans cette ligne, un simple
+# `pytest` à la racine ne collecte RIEN.
+python_files = ["tests.py", "test_*.py", "*_test.py"]
+# Indispensable : pytest-django doit connaître le module de settings, sinon la
+# suite Django n'est pas amorcée. `transcriptions`, `qwenweb` et `widget` sont
+# importés par leur nom court, d'où webapp/ sur le path.
+DJANGO_SETTINGS_MODULE = "qwenweb.settings"
+pythonpath = ["webapp"]
+# `qwen_asr/` ne doit pas être gravisé par pytest pour résoudre un nom de
+# module : il y a un `__init__.py` qui charge torch / transformers / nagisa, et
+# l'import nagisa échoue en MemoryError sur cette machine. Or ces tests ne
+# chargent utils.py que par importlib (cf. tests.py) et n'ont besoin de rien du
+# paquet.
+#
+# D'où testpaths ci-dessous qui vise les DEUX FICHIERS, et non leurs dossiers :
+# un chemin de fichier est pris tel quel, alors qu'un chemin de dossier fait
+# remonter pytest dans l'arborescence jusqu'au premier `__init__.py`.
+# Il faut aussi un nom de fichier par dossier, sinon pytest lève une erreur de
+# collision (les deux modules s'appellent « tests »).
+#
+# Solutions essayées et rejetées :
+#   - `--import-mode=importlib` : charge quand même le conftest implicite de
+#     qwen_asr/ -> MemoryError à la collecte.
+#   - `--ignore=qwen_asr` : fonctionne (243 tests) mais trompeur, il exclut
+#     stylistiquement une suite qu'on veut exécuter.
+#   - sys.path posé dans conftest.py : trop tard, pytest-django s'initialise
+#     pendant pytest_load_initial_conftests, avant.
+testpaths = [
+    "qwen_asr/tests/tests.py",
+    "webapp/transcriptions/tests.py",
+]
 
 [project.urls]
 Homepage = "https://github.com/Qwen/Qwen3-ASR"

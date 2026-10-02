@@ -253,9 +253,14 @@ def split_audio_into_chunks(
     """
     Split a long audio into chunks close to max_chunk_sec, using a low-energy boundary.
 
-    This implementation guarantees:
-      - Concatenating all returned chunks reproduces the original audio exactly
-        (total number of samples is identical, no overlaps, no gaps).
+    Chunks tile the input with no overlaps and no gaps: concatenating them
+    reproduces the original audio exactly (total number of samples identical).
+    Two caveats, both intentional:
+      - the last chunk is zero-padded to MIN_ASR_INPUT_SECONDS (0.5 s), which
+        ADDS samples; a single chunk shorter than that is padded as well;
+      - each cut can fall anywhere in the [cut - search_expand_sec,
+        cut + search_expand_sec] window, so a chunk may exceed max_chunk_sec by
+        up to search_expand_sec.
 
     Args:
         wav: Mono waveform float32.

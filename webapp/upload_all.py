@@ -4,6 +4,7 @@ et les soumet à la transcription via l'API Qwen3-ASR.
 
 Usage : ../.venv/Scripts/python.exe upload_all.py
 """
+# Importation des modules nécessaires
 import glob
 import json
 import os
@@ -11,11 +12,12 @@ import sys
 import time
 import urllib.request
 
+# Configuration des constantes pour le script
 BASE_URL = "http://127.0.0.1:8002"
 AUDACITY_DIR = os.path.join(os.path.expanduser("~"), "Documents", "audacity")
 SERVER_FILE = os.path.join(os.path.dirname(__file__), "run_server.py")
 
-
+# Fonction pour téléverser un fichier audio via l'API et retourner l'id du job
 def upload_file(filepath):
     """Téléverse un fichier audio via l'API et retourne l'id du job."""
     filename = os.path.basename(filepath)
@@ -44,7 +46,7 @@ def upload_file(filepath):
     except Exception as e:
         return {"error": str(e)}
 
-
+# Fonction pour vérifier l'état d'un job via l'API et attendre sa complétion
 def poll_job(job_id, max_wait=180):
     """Attend qu'un job soit terminé (polling toutes les 3s)."""
     start = time.time()
@@ -59,7 +61,7 @@ def poll_job(job_id, max_wait=180):
         time.sleep(3)
     return {"status": "timeout", "error": "Délai dépassé"}
 
-
+# Fonction principale du script : vérifie le serveur, trouve les fichiers audio et les téléverse
 def main():
     # Vérifier que le serveur tourne
     try:

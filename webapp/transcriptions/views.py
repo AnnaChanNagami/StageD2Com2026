@@ -19,16 +19,17 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from . import qwen_service
+from . import pdf_export, qwen_service
 from .models import TranscriptionJob
-
+# Différents imports pour la gestion des fichiers audio et des transcriptions, ainsi que pour les vues Django
+#-----------------Types de formats acceptés pour l'upload------------------------------------------------------------------------
 ALLOWED_EXT = {
     ".wav", ".mp3", ".mp4", ".flac", ".m4a", ".ogg", ".opus",
     ".aac", ".wma", ".mov", ".mkv", ".webm", ".amr",
 }
-
+#-----------------Taille maximale d'upload en octets (par défaut 2000 Mo)-------------------------------------------------------
 MAX_UPLOAD_BYTES = getattr(settings, "MAX_UPLOAD_SIZE_MB", 2000) * 1024 * 1024
-
+#-----------------Entête pour les fichiers texte-------------------------------------------------------------------------------------------
 TXT_HEADER = (
     "# Transcription Qwen3-ASR\n"
     "# Généré par l'application web — fichier : {name}\n"
@@ -41,6 +42,8 @@ TXT_HEADER = (
 # Page unique (bouton central)
 # --------------------------------------------------------------------------
 
+#-----------------Fonction pour la page d'accueil de l'application, affichant un gros bouton pour l'upload, 
+# un dépôt, et le texte en dessous---------------------------
 def home(request):
     """Page unique : un gros bouton, un dépôt/une capture, et le texte en dessous."""
     languages = sorted(qwen_service.supported_languages())
@@ -59,11 +62,16 @@ def home(request):
 # --------------------------------------------------------------------------
 # Pages
 # --------------------------------------------------------------------------
-
+#-----------------Fonction pour classifier les erreurs rencontrées lors de la transcription, en renvoyant
+#  une catégorie et une icône correspondante-------------------------
 def _classify_error(error_msg: str) -> tuple[str, str]:
     """Classifie un message d'erreur en (catégorie, icône_bootstrap)."""
     msg = error_msg.lower()
-    if "cuda" in msg or "out of memory" in msg or "oom" in msg:
+    # L'interruption est testée EN PREMIER : "KeyboardInterrupt" contient la
+    # sous-chaîne "key", qui déclencherait sinon la branche Authentification.
+    if "interrupted" in msg or "keyboard" in msg or "killed" in msg or "signal" in msg:
+        return ("Interruption", "bi-x-octagon")
+    elif "cuda" in msg or "out of memory" in msg or "oom" in msg:
         return ("Mémoire GPU / CUDA", "bi-memory")
     elif ("model" in msg or "modèle" in msg) and ("charg" in msg or "load" in msg or "download" in msg):
         return ("Modèle indisponible", "bi-box-seam")
@@ -77,10 +85,8 @@ def _classify_error(error_msg: str) -> tuple[str, str]:
         return ("Espace disque", "bi-device-hdd")
     elif "key" in msg or "token" in msg or "auth" in msg:
         return ("Authentification", "bi-key")
-    elif "network" in msg or "connection" in msg or "http" in msg or "timeout" in msg:
+    elif "network" in msg or "connection" in msg or "http" in msg:
         return ("Réseau", "bi-wifi-off")
-    elif "interrupted" in msg or "killed" in msg or "signal" in msg:
-        return ("Interruption", "bi-x-octagon")
     elif "memoryerror" in msg or "memory" in msg:
         return ("Mémoire RAM", "bi-memory")
     elif "nocudamemoryerror" in msg:
@@ -91,7 +97,8 @@ def _classify_error(error_msg: str) -> tuple[str, str]:
         return ("Autre erreur", "bi-question-circle")
     return ("Non catégorisé", "bi-help-circle")
 
-
+#----------------Fonction pour la page du tableau de bord de l'application, affichant diverses
+#  statistiques sur les transcriptions et les erreurs rencontrées------------------
 def dashboard(request):
     completed = TranscriptionJob.objects.filter(status=TranscriptionJob.Status.COMPLETED)
     total_jobs = TranscriptionJob.objects.count()
@@ -271,7 +278,9 @@ def dashboard(request):
     }
     return render(request, "transcriptions/dashboard.html", context)
 
-
+#--------------Fonction job_list pour la page listant les transcriptions, avec possibilité de filtrer
+#  par statut (en cours, terminé, erreur) + affichage de statistiques globales sur les transcriptions et l'état 
+# du backend -----------------------------------------------------------------------------------------------------------------
 @require_GET
 def job_list(request):
     filter_ = request.GET.get("filter", "all")
@@ -300,7 +309,8 @@ def job_list(request):
     }
     return render(request, "transcriptions/job_list.html", context)
 
-
+#-----------------Fonction job_detail pour la page détaillée d'une transcription, affichant les segments, 
+# la durée, et les informations sur le backend -------------------------------------------------------------------------------------------
 def job_detail(request, job_id):
     job = get_object_or_404(TranscriptionJob, id=job_id)
     segments = job.parse_segments()
@@ -315,7 +325,8 @@ def job_detail(request, job_id):
     }
     return render(request, "transcriptions/job_detail.html", context)
 
-
+#------------------Fonction correction pour la page de correction d'une transcription, affichant le texte 
+# original et permettant d'écrire la version corrigée, avec sauvegarde de la correction dans la base de données---------------------------------------
 def correction(request, job_id):
     """Page de correction : affiche la transcription originale et permet d'écrire la version corrigée."""
     job = get_object_or_404(TranscriptionJob, id=job_id)
@@ -336,7 +347,8 @@ def correction(request, job_id):
     }
     return render(request, "transcriptions/correction.html", context)
 
-
+#-----------------Fonction upload pour la page d'upload d'un fichier audio, redirigeant vers l'API de création 
+# d'une transcription, avec affichage des langues supportées et de la disponibilité du backend---------------------------
 def upload(request):
     if request.method == "POST":
         return redirect("transcriptions:api_job_create")  # le POST passe par l'API
@@ -356,6 +368,7 @@ def upload(request):
 # API JSON
 # --------------------------------------------------------------------------
 
+#-----------------Fonction pour l'API de création d'une transcription, acceptant un fichier audio et des paramètres---------------
 @csrf_exempt
 @require_POST
 def api_job_create(request):
@@ -398,7 +411,8 @@ def api_job_create(request):
     url = reverse("transcriptions:job_detail", args=[job.id])
     return JsonResponse({"id": str(job.id), "status": job.status, "url": url}, status=201)
 
-
+#-----------------Fonction pour l'API de récupération du statut d'une transcription, renvoyant 
+# les informations pour le job --------------------------------------------------------------------------------------------
 @require_GET
 def api_job_status(request, job_id):
     job = get_object_or_404(TranscriptionJob, id=job_id)
@@ -421,6 +435,8 @@ def api_job_status(request, job_id):
 
 
 @require_GET
+#------------------Point de sortie de l'API fournissant des statistiques globales sur les transcriptions
+# retourne un JSON contenant les compteurs par statut et les métriques cumulées--------------------------------------------------
 def api_stats(request):
     jobs = TranscriptionJob.objects.all()
     completed = jobs.filter(status=TranscriptionJob.Status.COMPLETED)
@@ -441,7 +457,8 @@ def api_stats(request):
 # --------------------------------------------------------------------------
 # Téléchargements
 # --------------------------------------------------------------------------
-
+#-----------------Fonction pour télécharger la transcription complète au format texte, avec un en-tête contenant 
+# le nom du fichier, la date et la langue détectée, si la transcription est terminée----------------------------------------
 def download_txt(request, job_id):
     job = get_object_or_404(TranscriptionJob, id=job_id)
     if job.status != TranscriptionJob.Status.COMPLETED:
@@ -455,7 +472,7 @@ def download_txt(request, job_id):
     resp["Content-Disposition"] = f'attachment; filename="transcript_{job.id}.txt"'
     return resp
 
-
+#-----------------Fonction pour télécharger les segments de la transcription au format JSON, si la transcription est terminée----------------
 def download_json(request, job_id):
     job = get_object_or_404(TranscriptionJob, id=job_id)
     if job.status != TranscriptionJob.Status.COMPLETED:
@@ -465,7 +482,7 @@ def download_json(request, job_id):
     resp["Content-Disposition"] = f'attachment; filename="segments_{job.id}.json"'
     return resp
 
-
+#-----------------Fonction pour télécharger les sous-titres de la transcription au format SRT, si la transcription est terminée-----------------
 def download_srt(request, job_id):
     job = get_object_or_404(TranscriptionJob, id=job_id)
     if job.status != TranscriptionJob.Status.COMPLETED:
@@ -476,10 +493,23 @@ def download_srt(request, job_id):
     return resp
 
 
+#-----------------Fonction pour télécharger le compte rendu de la transcription au format PDF, si la transcription est terminée.
+# ?corrige=1 exporte le texte corrigé par l'utilisateur quand il existe, sinon le texte brut----------------
+def download_pdf(request, job_id):
+    job = get_object_or_404(TranscriptionJob, id=job_id)
+    if job.status != TranscriptionJob.Status.COMPLETED:
+        return HttpResponseBadRequest("Transcription non terminée.")
+    data = pdf_export.build_transcript_pdf(job, corrected=request.GET.get("corrige") == "1")
+    resp = HttpResponse(data, content_type="application/pdf")
+    resp["Content-Disposition"] = f'attachment; filename="transcript_{job.id}.pdf"'
+    return resp
+
+
 # --------------------------------------------------------------------------
 # Suppression
 # --------------------------------------------------------------------------
-
+#-----------------Fonction interne pour supprimer un job de transcription, en supprimant le fichier audio
+# associé si présent, et en supprimant l'entrée de la base de données--------------------------------------------------------
 def _delete_job(job):
     if job.audio_file:
         try:
@@ -491,6 +521,8 @@ def _delete_job(job):
 
 
 @require_POST
+#-----------------Fonction pour supprimer un job de transcription spécifique, redirigeant vers la 
+# liste des jobs après suppression--------------------------------------------------------------------------------------------
 def delete_job(request, job_id):
     job = get_object_or_404(TranscriptionJob, id=job_id)
     _delete_job(job)
@@ -498,6 +530,9 @@ def delete_job(request, job_id):
 
 
 @require_POST
+#----------------Vue Django permettant de supprimer plusieurs jobs de transcription en une seule requête, 
+# en récupérant les identifiants des jobs à supprimer depuis la requête POST, puis en appelant la fonction interne 
+# _delete_job pour chaque job correspondant aux identifiants fournis, et enfin redirigeant vers la liste des jobs après suppression ------------------- 
 def delete_jobs_bulk(request):
     ids = request.POST.getlist("job_ids")
     if ids:
@@ -510,7 +545,9 @@ def delete_jobs_bulk(request):
 # ============================================================
 # Métriques d'erreur (corrections)
 # ============================================================
-
+#-----------------Fonction interne pour calculer la distance de Levenshtein entre deux chaînes de caractères, 
+# utilisée pour mesurer le nombre d'éditions nécessaires pour transformer une chaîne en une autre, 
+# ce qui est utile pour calculer le taux d'erreurs de caractères (CER) et le taux d'erreurs de mots (WER) -----------------------
 def _levenshtein(s1: str, s2: str) -> int:
     """Distance de Levenshtein entre deux chaînes."""
     if len(s1) < len(s2):
@@ -528,7 +565,8 @@ def _levenshtein(s1: str, s2: str) -> int:
         prev_row = curr_row
     return prev_row[-1]
 
-
+#-----------------Fonction interne pour calculer le taux d'erreurs de mots (WER) 
+# entre une référence et une hypothèse, en utilisant la distance de Levenshtein sur les mots---------------------------------------
 def _compute_wer(reference: str, hypothesis: str) -> float:
     """Word Error Rate : distance Levenshtein sur les mots."""
     ref_words = reference.split()
@@ -549,7 +587,8 @@ def _compute_wer(reference: str, hypothesis: str) -> float:
         prev = curr
     return prev[-1] / len(ref_words)
 
-
+#---------------------Fonction de calculs du nombre minimal d'éditions (insertion, suppression ou subtitutions)
+# nécessaires pour transformer une chaîne de mots 'a' en une chaîne 'b' (distance de Levenshtein entre les mots)-------------------
 def _levenshtein_words(a: str, b: str) -> int:
     """Nombre d'éditions (distance de Levenshtein) au niveau des mots."""
     aw = a.split()
@@ -567,7 +606,7 @@ def _levenshtein_words(a: str, b: str) -> int:
         prev = curr
     return prev[-1]
 
-
+#-----------------Fonction interne pour calculer la différence mot-à-mot entre le texte ASR et le texte corrigé-------------------
 def _word_diff(asr_text: str, corrected_text: str) -> list[dict]:
     """Renvoie une liste de dicts (word, status) : 'same', 'insert', 'delete'."""
     if not asr_text or not corrected_text:
@@ -593,7 +632,7 @@ def _word_diff(asr_text: str, corrected_text: str) -> list[dict]:
                 result.append({"word": w, "status": "insert"})
     return result
 
-
+#-----------------Vue Django pour la page de statistiques d'erreurs, affichant le taux d'erreurs de caractères (CER)------------
 def corrections(request):
     """Page statistiques d'erreurs : CER, WER, graphiques, comparatif côte à côte."""
     qs = TranscriptionJob.objects.filter(status="completed").order_by("-created_at")
@@ -674,7 +713,9 @@ def corrections(request):
         },
     )
 
-
+#-----------------Fonction interne pour générer un fichier CSV téléchargeable contenant les métriques de correction 
+# pour chaque transcription, incluant le nom du fichier, le nombre de mots et de caractères, les erreurs de caractères
+# et de mots, CER + WER ainsi que le texte ASR et le texte corrigé------------------------------------------------------------
 def _corrections_csv(rows: list[dict]) -> HttpResponse:
     """Génère un CSV téléchargeable avec les métriques de correction."""
     response = HttpResponse(content_type="text/csv; charset=utf-8")
@@ -691,21 +732,3 @@ def _corrections_csv(rows: list[dict]) -> HttpResponse:
             f"{r['wer']:.1f}".replace(".", ","), r["asr_text"], r["corrected_text"],
         ])
     return response
-
-
-# ============================================================
-# Widget embarquable (bouton de transcription cross-domaine)
-# ============================================================
-
-def widget_standalone(request):
-    """Page autonome qui héberge le widget (équivalent iframe/script).
-
-    Sert uniquement à tester le widget sur le même serveur ; le widget
-    fonctionne aussi depuis n'importe quel site tiers.
-    """
-    return render(request, "transcriptions/widget.html", {"active": "widget"})
-
-
-def widget_demo(request):
-    """Page de démonstration montrant comment intégrer le widget."""
-    return render(request, "transcriptions/widget_demo.html", {"active": "widget"})

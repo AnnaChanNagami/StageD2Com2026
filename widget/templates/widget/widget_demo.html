@@ -76,14 +76,18 @@
   title:      "Transcription vocale",       // titre du panneau
   lang:       "",                           // force la langue ("fr", "en"…)
   timestamps: false,                        // true = segments avec timestamps
-  maxTokens:  512                           // limite de tokens générés
+  maxTokens:  512,                          // limite de tokens générés
+  history:    true,                         // false pour masquer l'historique
+  historyMax: 30,                           // nombre d'entrées conservées
+  download:   true,                         // false pour masquer le téléchargement
+  format:     "txt"                         // "txt" ou "json" — format d'export
 }</pre>
 
   <h2>Liens</h2>
   <p>
-    <a href="{% url 'transcriptions:home' %}">Interface complète</a> ·
-    <a href="{% url 'transcriptions:dashboard' %}">Dashboard</a> ·
-    <a href="{% url 'transcriptions:job_list' %}">Historique</a>
+    <a href="/">Interface complète</a> ·
+    <a href="/dashboard/">Dashboard</a> ·
+    <a href="/jobs/">Historique</a>
   </p>
 
   <div class="note">
@@ -99,7 +103,11 @@
     apiBase: "{{ request.scheme }}://{{ request.get_host }}",
     position: "bottom-right",
     accent: "#3a6fd8",
-    title: "Transcription vocale"
+    title: "Transcription vocale",
+    history: true,
+    historyMax: 30,
+    download: true,
+    format: "txt"
   };
 </script>
 <script src="{{ request.scheme }}://{{ request.get_host }}{% static 'widget/qwen3asr-widget.js' %}"></script>

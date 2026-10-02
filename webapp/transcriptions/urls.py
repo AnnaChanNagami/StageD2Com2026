@@ -6,8 +6,6 @@ app_name = "transcriptions"
 
 urlpatterns = [
     path("", views.home, name="home"),
-    path("widget/", views.widget_standalone, name="widget_standalone"),
-    path("widget/demo/", views.widget_demo, name="widget_demo"),
     path("dashboard/", views.dashboard, name="dashboard"),
         path("jobs/", views.job_list, name="job_list"),
     path("jobs/create/", views.api_job_create, name="api_job_create"),
@@ -24,4 +22,5 @@ urlpatterns = [
     path("download/<uuid:job_id>/txt/", views.download_txt, name="download_txt"),
     path("download/<uuid:job_id>/json/", views.download_json, name="download_json"),
     path("download/<uuid:job_id>/srt/", views.download_srt, name="download_srt"),
+    path("download/<uuid:job_id>/pdf/", views.download_pdf, name="download_pdf"),
 ]

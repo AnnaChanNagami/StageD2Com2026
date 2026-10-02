@@ -243,6 +243,16 @@
                         <span><i class="bi bi-filetype-txt text-lg text-slate-500 me-2"></i> Fichier TXT</span>
                         <i class="bi bi-download text-slate-400"></i>
                     </a>
+                    <a href="{% url 'transcriptions:download_pdf' job.id %}" class="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-marine transition-colors flex items-center justify-between">
+                        <span><i class="bi bi-file-earmark-pdf text-lg text-red-500 me-2"></i> Compte rendu PDF</span>
+                        <i class="bi bi-download text-slate-400"></i>
+                    </a>
+                    {% if job.corrected_text %}
+                    <a href="{% url 'transcriptions:download_pdf' job.id %}?corrige=1" class="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-marine transition-colors flex items-center justify-between">
+                        <span><i class="bi bi-file-earmark-check text-lg text-emerald-500 me-2"></i> Compte rendu PDF <span class="text-slate-400 font-normal">(corrigé)</span></span>
+                        <i class="bi bi-download text-slate-400"></i>
+                    </a>
+                    {% endif %}
                     {% if segments %}
                     <a href="{% url 'transcriptions:download_srt' job.id %}" class="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-marine transition-colors flex items-center justify-between">
                         <span><i class="bi bi-closed-captioning text-lg text-sky-500 me-2"></i> Sous-titres SRT</span>
