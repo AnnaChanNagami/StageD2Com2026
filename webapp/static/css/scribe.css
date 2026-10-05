@@ -248,8 +248,19 @@ details.opts[open] .opts-caret { transform: rotate(180deg); }
 }
 
 @media (max-width: 860px) {
-    .sidebar { position: static; width: auto; min-height: 0; }
+    .sidebar { 
+        position: fixed; 
+        top: 0; 
+        left: -260px; 
+        bottom: 0; 
+        width: 260px; 
+        transition: left 0.3s ease;
+        background: white;
+        z-index: 50;
+    }
+    .sidebar.open { left: 0; }
     .main-content { margin-left: 0; padding: 1.25rem; }
+    #mobile-menu-btn { display: block; }
 }
 
 @media (prefers-reduced-motion: reduce) {

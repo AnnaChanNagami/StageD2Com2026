@@ -42,6 +42,13 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{% static 'js/chart.umd.min.js' %}"></script>
     <script src="https://cdn.jsdelivr.net/npm/diff@7.0.0/dist/diff.min.js"></script>
-    {% block extra_js %}{% endblock %}
+        <script>
+            // Widget = client de transcription unique, présent sur toutes les pages.
+            // `timestamps: true` préserve l'export SRT (désactivé par défaut côté widget).
+            window.QWEN3ASR_WIDGET = window.QWEN3ASR_WIDGET || {};
+            window.QWEN3ASR_WIDGET.timestamps = true;
+        </script>
+        <script src="{% static 'widget/qwen3asr-widget.js' %}"></script>
+        {% block extra_js %}{% endblock %}
 </body>
 </html>
