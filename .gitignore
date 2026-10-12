@@ -28,3 +28,6 @@ webapp/media/uploads/
 webapp/db.sqlite3
 *.wav
 *.mp3
+# Fichiers statiques collectés (collectstatic) et sauvegardes de .git
+webapp/staticfiles/
+.git.corrupt-backup/
