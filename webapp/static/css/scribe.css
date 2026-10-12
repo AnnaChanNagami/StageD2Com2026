@@ -247,20 +247,117 @@ details.opts[open] .opts-caret { transform: rotate(180deg); }
     box-sizing: border-box;
 }
 
-@media (max-width: 860px) {
-    .sidebar { 
-        position: fixed; 
-        top: 0; 
-        left: -260px; 
-        bottom: 0; 
-        width: 260px; 
-        transition: left 0.3s ease;
-        background: white;
+/* =========================================================================
+   RESPONSIVE — tablette puis mobile
+   -------------------------------------------------------------------------
+   ≥1025px : layout d'origine (sidebar fixe 260px + contenu décalé).
+   ≤1024px : la sidebar devient un tiroir hors écran, dégagé par un bouton
+             hamburger ; le contenu reprend toute la largeur.
+   ≤640px  : paddings et tailles de texte réduits (mobile).
+   ========================================================================= */
+
+/* --- Bouton hamburger (caché sur desktop, affiché ≤1024px) -------------- */
+#mobile-menu-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    font-size: 1.5rem;
+    line-height: 1;
+    border: none;
+    cursor: pointer;
+    background: #1f3864;
+    color: #fff;
+    border-radius: 0.7rem;
+    box-shadow: 0 6px 18px rgba(31, 56, 100, 0.35);
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+#mobile-menu-btn:hover { background: #2e5496; }
+#mobile-menu-btn:active { transform: scale(0.95); }
+#mobile-menu-btn:focus-visible { outline: 3px solid rgba(138, 180, 255, 0.8); outline-offset: 2px; }
+
+/* Voile d'assombrissement derrière le tiroir (mobile/tablette seulement). */
+#mobile-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 26, 48, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+    z-index: 45;
+}
+
+/* --- Tablette : sidebar en tiroir coulissant --------------------------- */
+@media (max-width: 1024px) {
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 260px;
+        max-width: 82vw;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        will-change: transform;
         z-index: 50;
+        overflow-y: auto;
+        overscroll-behavior: contain;
     }
-    .sidebar.open { left: 0; }
-    .main-content { margin-left: 0; padding: 1.25rem; }
-    #mobile-menu-btn { display: block; }
+    .sidebar.open { transform: translateX(0); }
+
+    .main-content { margin-left: 0; padding: 1.5rem; }
+
+    /* Le bouton hamburger flotte au-dessus du contenu. */
+    #mobile-menu-btn {
+        display: flex;
+        position: fixed;
+        top: 1rem;
+        left: 1rem;
+        z-index: 60;
+    }
+
+    /* Voile visible seulement quand le tiroir est ouvert. */
+    #mobile-overlay { display: block; }
+    #mobile-overlay.visible { opacity: 1; pointer-events: auto; }
+
+    /* On décale le contenu pour ne pas le passer sous le bouton hamburger. */
+    .main-content { padding: 4.5rem 1.5rem 2rem; }
+
+    /* Les titres de page ne doivent pas passer sous le bouton. */
+    .main-content h2 { font-size: 1.5rem; }
+}
+
+/* --- Mobile : paddings et grilles resserrés ---------------------------- */
+@media (max-width: 640px) {
+    .main-content { padding: 4.5rem 0.9rem 3rem; }
+
+    /* En-têtes de page « titre + bouton d'action » : on les empile pour que le
+       bouton ne passe pas à la ligne de façon incontrôlée ni hors écran. */
+    .main-content .flex.justify-between.items-center,
+    .main-content .flex.items-center.justify-between { flex-direction: column; align-items: stretch; gap: 0.75rem; }
+    .main-content .flex.justify-between.items-center > a,
+    .main-content .flex.items-center.justify-between > a { width: 100%; justify-content: center; text-align: center; }
+
+    /* Tableaux larges : défilement horizontal plutôt que débordement de page. */
+    .main-content table { display: block; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .main-content table tbody,
+    .main-content table thead { min-width: max-content; }
+
+    /* Boutons d'action pleine largeur pour le tactile. */
+    .main-content a[class*="bg-marine"],
+    .main-content button[class*="bg-marine"] { width: 100%; justify-content: center; text-align: center; }
+
+    /* Canvases Chart.js : on les contraint au conteneur parent pour qu'ils ne
+       débordent pas quand la largeur est recalculée après coup. */
+    .main-content canvas { max-width: 100% !important; }
+    .main-content .h-64,
+    .main-content [class*="h-"] > canvas { width: 100%; }
+
+    /* Cartes à padding large : on resserre. */
+    .main-content .p-6 { padding: 1rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

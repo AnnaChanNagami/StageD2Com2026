@@ -13,6 +13,26 @@ import os
 # Construit des chemins dans le projet comme ceci : BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+# Aide de lecture des variables d'environnement : les valeurs par défaut
+# ci-dessous sont celles du poste de développement, donc un lancement local
+# (sans variable d'env) se comporte exactement comme avant. Elles servent à
+# décrire l'environnement sans éditer ce fichier — c'est ce qu'utilisent les
+# conteneurs Docker (voir docker-compose.yml) pour choisir CPU/GPU, la base
+# SQLite et le dossier du cache HuggingFace.
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in ("0", "false", "no", "off", "")
+
+
+def _env_list(name: str, default: list[str]) -> list[str]:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
 # Répertoire racine du dépôt cloné (contient qwen_asr/, widget/).
 # webapp/ est un sous-dossier du dépôt.
 REPO_ROOT = BASE_DIR.parent
@@ -23,12 +43,20 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 # Quick-start des paramètres de développement - inadapté pour la production
-SECRET_KEY = 'django-insecure-qwen3-asr-local-webapp-secret-key-7kd!$=^w&'
+SECRET_KEY = os.environ.get(
+    "QWEN_SECRET_KEY",
+    'django-insecure-qwen3-asr-local-webapp-secret-key-7kd!$=^w&',
+)
 
 # ATTENTION : ne pas utiliser DEBUG=True en production, car cela peut exposer des informations sensibles 
-DEBUG = True
+DEBUG = _env_bool("QWEN_DEBUG", True)
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = _env_list("QWEN_ALLOWED_HOSTS", ["*"])
+
+# Renseigné quand l'application est servie derrière un reverse proxy / une
+# adresse IP (les POST des formulaires Django sont alors refusés sans cette
+# liste). Vide par défaut : rien ne change en local.
+CSRF_TRUSTED_ORIGINS = _env_list("QWEN_CSRF_TRUSTED_ORIGINS", [])
 
 # Application definition
 INSTALLED_APPS = [
@@ -99,6 +127,9 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static', REPO_ROOT / 'widget' / 'static']
 
+# Fichiers statiques collectés (utilisés par Whitenoise en conteneur)
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
 # Media (fichiers audio téléversés + exports)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
@@ -123,7 +154,7 @@ QWEN_FORCED_ALIGNER = "Qwen/Qwen3-ForcedAligner-0.6B"
 
 # Device et dtype : cuda:0 recommandé (GPU), "cpu" sinon ('auto' peut se
 # rabattre sur un CPU fp32 très lent).
-QWEN_DEVICE = "cuda:0"
+QWEN_DEVICE = os.environ.get("QWEN_DEVICE", "cpu")  # défaut CPU : multi-OS, GPU optionnel (cuda:0 / mps)
 QWEN_DTYPE = "bfloat16"           # bfloat16 | float16 | float32
 
 QWEN_MAX_NEW_TOKENS = 512         # max de tokens générés par chunk
@@ -138,6 +169,48 @@ QWEN_APP_TITLE = "Qwen3-ASR Web"
 
 # Remplissage automatique du champ "prompt" avec des mots-clés pour guider la transcription
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ---------------------------------------------------------------------------
+# Configuration Celery / Redis
+# ---------------------------------------------------------------------------
+# Broker et backend de résultats : Redis (défaut localhost:6379)
+# Peut être surchargé par variables d'env : CELERY_BROKER_URL, CELERY_RESULT_BACKEND
+# NB : le Redis local est en 3.0.504, qui ne connaît pas la commande HELLO (RESP3)
+# envoyée par défaut par redis-py >= 6. D'où le pin redis==5.2.1 dans requirements.txt,
+# qui reste en RESP2. Ne pas ajouter "?protocol=2" aux URLs : kombu le rejette
+# (TypeError: Connection._init_params() got an unexpected keyword argument 'protocol').
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
+
+# Sérialisation JSON uniquement (sécurité)
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]
+
+# Timezone
+CELERY_TIMEZONE = "Europe/Paris"
+CELERY_ENABLE_UTC = True
+
+# Workers non pré-fetch pour jobs longs (transcription = minutes)
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_ACKS_LATE = True
+
+# Résultats expirent après 24h
+CELERY_RESULT_EXPIRES = 86400
+
+# Routage : file dédiée pour la transcription
+CELERY_TASK_ROUTES = {
+    "transcriptions.tasks.*": {"queue": "transcription"},
+}
+
+# Beat schedule : purge RGPD quotidienne (02:00)
+from celery.schedules import crontab
+CELERY_BEAT_SCHEDULE = {
+    "purge-expired-jobs-daily": {
+        "task": "transcriptions.tasks.purge_expired_jobs",
+        "schedule": crontab(hour=2, minute=0),
+    },
+}
 
 # ---------------------------------------------------------------------------
 # Conservation des données (RGPD — art. 5.1.e : limitation de la conservation)

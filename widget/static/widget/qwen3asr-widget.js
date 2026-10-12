@@ -146,7 +146,28 @@
     '.qw3-hist-note{font-size:10.5px;color:#64748b;margin-top:2px;}' +
     '@keyframes qw3-spin{to{transform:rotate(360deg);}}' +
     '@keyframes qw3-pulse{0%,100%{box-shadow:0 0 0 0 rgba(225,29,72,.5);}50%{box-shadow:0 0 0 14px rgba(225,29,72,0);}}' +
-    '@keyframes qw3-blink{50%{opacity:.35;}}';
+    '@keyframes qw3-blink{50%{opacity:.35;}}' +
+    /* --- Écrans étroits (tablette portrait / mobile) --- */
+    // Sur petit écran le panneau passe en feuille quasi pleine largeur et se
+    // cale au-dessus du bouton flottant, sans déborder du viewport.
+    '@media (max-width: 520px){' +
+      // `position:fixed` : le panneau est positionné par rapport au viewport et
+      // non au bouton flottant (root ne fait que la taille du bouton).
+      '.qw3-panel{position:fixed;width:auto;left:12px;right:12px;max-width:none;' +
+        'max-height:calc(100vh - 128px);border-radius:14px;}' +
+      // Repli pour les navigateurs sans unité dvh (viewport mobile dynamique).
+      '@supports (height:100dvh){.qw3-panel{max-height:calc(100dvh - 128px);}}' +
+      '.qw3-fab{width:54px;height:54px;}' +
+      '.qw3-fab svg{width:23px;height:23px;}' +
+      '.qw3-foot{gap:6px;padding:10px 12px;}' +
+      '.qw3-btn{flex:1 1 auto;justify-content:center;padding:10px 8px;font-size:12px;}' +
+      '.qw3-body{font-size:14px;padding:12px 14px;}' +
+    '}' +
+    // Tablette : le panneau garde sa largeur mais devient plus bas pour laisser
+    // de la place au contenu de la page hôte.
+    '@media (min-width: 521px) and (max-width: 900px){' +
+      '.qw3-panel{width:320px;max-height:min(70vh,560px);}' +
+    '}';
 
   var styleEl = document.createElement('style');
   styleEl.textContent = CSS;

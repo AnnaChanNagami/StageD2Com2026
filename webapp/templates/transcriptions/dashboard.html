@@ -34,8 +34,9 @@
     </a>
 </div>
 
-<!-- Graphiques -->
-<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+<!-- Graphiques : 2 colonnes seulement à partir de lg (1024px), sinon les
+     canvases Chart.js sont trop étroits et débordent en tablette. -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
     <div class="bg-white p-6 rounded-xl border border-gray-200">
         <h3 class="font-bold text-marine mb-4"><i class="bi bi-graph-up"></i> Activité (7 derniers jours)</h3>
         <div class="h-64"><canvas id="activityChart"></canvas></div>

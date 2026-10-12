@@ -368,6 +368,27 @@ def upload(request):
 # API JSON
 # --------------------------------------------------------------------------
 
+from transcriptions.tasks import transcribe_job
+
+#-----------------Convertit une valeur de POST en entier strictement positif, ou renvoie `default`-----------------
+def _coerce_positive_int(raw, default: int) -> int:
+    """Lit un entier positif venu du POST sans jamais lever.
+
+    Les champs `max_new_tokens` / `max_tokens` sont libres dans le formulaire et
+    recopiés tels quels par le widget embarquable (attributs `data-max-tokens`).
+    Un `int()` nu ferait remonter un ValueError -> 500 sur une simple coquille dans
+    l'URL du widget, donc on retombe sur la valeur par défaut. Une borne haute evite
+    aussi qu'un `max_new_tokens=999999999` sature la memoire du modele.
+    """
+    try:
+        value = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return default
+    if value <= 0:
+        return default
+    return min(value, 8192)
+
+
 #-----------------Fonction pour l'API de création d'une transcription, acceptant un fichier audio et des paramètres---------------
 @csrf_exempt
 @require_POST
@@ -392,22 +413,31 @@ def api_job_create(request):
     if language and language not in qwen_service.supported_languages():
         language = ""
 
+    # `max_new_tokens` vient du POST (le widget le recopie depuis data-max-tokens) :
+    # une valeur non numérique ou négative ne doit pas remonter en ValueError/500,
+    # on retombe sur la valeur par défaut.
+    max_new_tokens = _coerce_positive_int(
+        request.POST.get("max_new_tokens", "")
+        or request.POST.get("max_tokens", ""),
+        default=512,
+    )
+
     job = TranscriptionJob(
             audio_file=audio,
             original_name=audio.name[:500],
             prompt=(request.POST.get("prompt", "") or "").strip(),
             language=language,
-            max_new_tokens=int(
-                request.POST.get("max_new_tokens", "")
-                or request.POST.get("max_tokens", "")
-                or 512
-            ),
+            max_new_tokens=max_new_tokens,
             want_timestamps=request.POST.get("timestamps", "") in ("1", "true", "on"),
             duration_sec=None,
             content_type=(audio.content_type or "")[:128],
             file_size=audio.size,
         )
     job.save()
+
+    # File la tâche dans Celery (Redis broker) — remplace l'ancien run_worker
+    transcribe_job.delay(str(job.id))
+
     url = reverse("transcriptions:job_detail", args=[job.id])
     return JsonResponse({"id": str(job.id), "status": job.status, "url": url}, status=201)
 
@@ -420,7 +450,7 @@ def api_job_status(request, job_id):
         "id": str(job.id),
         "status": job.status,
         "stage": job.stage,
-        "progress": round(job.progress * 100, 1),
+        "progress": max(0.0, min(100.0, round(job.progress * 100, 1))),
         "error": job.error,
         "original_name": job.original_name,
         "created_at": job.created_at.isoformat() if job.created_at else None,

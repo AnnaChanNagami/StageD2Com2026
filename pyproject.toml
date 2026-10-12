@@ -42,6 +42,8 @@ vllm = [
 webapp = [
   "django>=5.2",
   "fpdf2==2.8.9",   # export PDF du compte rendu de transcription (pdf_export.py)
+  "celery>=5.4",
+  "redis>=5.2",
 ]
 # Outils de test : pypdf relit le PDF généré pour vérifier le texte extrait.
 dev = [
@@ -77,9 +79,16 @@ pythonpath = ["webapp"]
 #     stylistiquement une suite qu'on veut exécuter.
 #   - sys.path posé dans conftest.py : trop tard, pytest-django s'initialise
 #     pendant pytest_load_initial_conftests, avant.
+# Un basename de fichier UNIQUE par module de test, sinon pytest lève
+# « import file mismatch » (les 3 modules s'appellent « tests ») : en mode
+# `prepend` et sans `__init__.py`, ils s'importent tous comme `tests`.
+# `widget/` est un paquet (il a son `__init__.py`), son module de tests est donc
+# importable sans casser `include("widget.urls")` dans qwenweb/urls.py.
+# `test_widget_edge_cases.py` couvre les cas limites des endpoints du widget.
 testpaths = [
     "qwen_asr/tests/tests.py",
     "webapp/transcriptions/tests.py",
+    "widget/test_widget_edge_cases.py",
 ]
 
 [project.urls]

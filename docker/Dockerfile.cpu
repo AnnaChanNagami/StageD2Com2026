@@ -1,0 +1,49 @@
+# Dockerfile CPU : servira le webapp Django + widget (multi-OS)
+# Base image CPU PyTorch 2.8 + cuDNN compatible minimal; on force CPU
+FROM pytorch/pytorch:2.8.0-cpu AS base
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    TZ=Europe/Paris \
+    QWEN_DEVICE=cpu \
+    QWEN_BACKEND=transformers \
+    QWEN_DEBUG=false \
+    QWEN_ALLOWED_HOSTS=* \
+    CELERY_BROKER_URL=redis://redis:6379/0 \
+    CELERY_RESULT_BACKEND=redis://redis:6379/0 \
+    HF_HOME=/app/.cache/huggingface \
+    TRANSFORMERS_CACHE=/app/.cache/huggingface \
+    XDG_CACHE_HOME=/app/.cache
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    sox \
+    libsox-fmt-all \
+    curl \
+    ca-certificates \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml ./
+
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -e ".[webapp,widget]" \
+    && pip install --no-cache-dir "gunicorn>=21.2.0" "whitenoise>=6.7.0"
+
+# Copie tout le dépôt (qwen_asr/, webapp/, widget/, static/, etc.)
+COPY . .
+
+# Répertoire pour caches/models + media/static
+RUN mkdir -p /app/.cache/huggingface /app/webapp/media /app/webapp/staticfiles
+
+# Collecte des fichiers statiques
+WORKDIR /app/webapp
+RUN python manage.py collectstatic --noinput
+
+EXPOSE 8000
+
+# Entrée par défaut : Gunicorn ; le docker-compose surchargera pour le worker
+CMD ["gunicorn", "qwenweb.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120"]

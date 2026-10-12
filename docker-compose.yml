@@ -1,0 +1,79 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cpu
+    container_name: qwen3-asr-web
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - QWEN_DEVICE=cpu
+      - QWEN_BACKEND=transformers
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - HF_HOME=/app/.cache/huggingface
+      - TRANSFORMERS_CACHE=/app/.cache/huggingface
+      - XDG_CACHE_HOME=/app/.cache
+      - QWEN_ALLOWED_HOSTS=*
+      - QWEN_CSRF_TRUSTED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./webapp/db.sqlite3:/app/webapp/db.sqlite3:rw
+      - ./webapp/media:/app/webapp/media:rw
+      - hf_cache:/app/.cache/huggingface:rw
+    ports:
+      - "8000:8000"
+    command: >
+      gunicorn qwenweb.wsgi:application
+      --bind 0.0.0.0:8000
+      --workers 2
+      --timeout 300
+      --max-requests 1000
+      --max-requests-jitter 100
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cpu
+    container_name: qwen3-asr-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - QWEN_DEVICE=cpu
+      - QWEN_BACKEND=transformers
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - HF_HOME=/app/.cache/huggingface
+      - TRANSFORMERS_CACHE=/app/.cache/huggingface
+      - XDG_CACHE_HOME=/app/.cache
+    depends_on:
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_started
+    volumes:
+      - ./webapp/db.sqlite3:/app/webapp/db.sqlite3:rw
+      - ./webapp/media:/app/webapp/media:rw
+      - hf_cache:/app/.cache/huggingface:rw
+    command: >
+      python manage.py run_worker
+      --concurrency 1
+      --poll-interval 1.0
+
+volumes:
+  hf_cache:
